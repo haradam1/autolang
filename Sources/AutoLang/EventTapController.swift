@@ -25,6 +25,10 @@ final class EventTapController {
     /// the engine reverts it. Carries whatever the engine armed via `armUndo`.
     var onUndo: (() -> Void)?
 
+    /// Called on a plain backspace (not an undo): the engine drops its
+    /// retroactive lookback, since the on-screen text no longer matches.
+    var onContextReset: (() -> Void)?
+
     /// Set by the engine right after an auto-conversion; the very next keystroke
     /// either triggers an undo (if it's backspace) or clears this.
     private var undoArmed = false
@@ -116,9 +120,10 @@ final class EventTapController {
             return Unmanaged.passUnretained(event)
         }
 
-        // Backspace: mirror it in our buffer.
+        // Backspace: mirror it in our buffer and invalidate any retro lookback.
         if keycode == 0x33 {
             buffer.deleteLast()
+            DispatchQueue.main.async { [weak self] in self?.onContextReset?() }
             return Unmanaged.passUnretained(event)
         }
 

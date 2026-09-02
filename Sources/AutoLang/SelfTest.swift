@@ -35,6 +35,12 @@ enum SelfTest {
         checkBool("spell: youre valid via contraction", spell.isValid("youre", .english), true)
         checkBool("spell: akuo still NOT valid (no contraction)", spell.isValid("akuo", .english), false)
 
+        // Typo correction (Phase 2.5)
+        check("typo: dont -> don't (contraction)", spell.contractionCorrection("dont") ?? "nil", "don't")
+        check("typo: hello has no contraction", spell.contractionCorrection("hello") ?? "nil", "nil")
+        check("typo: helllo -> hello (spelling)", spell.topCorrection("helllo", .english) ?? "nil", "hello")
+        check("typo: hello needs no correction", spell.topCorrection("hello", .english) ?? "nil", "nil")
+
         print(failed ? "SELFTEST: FAIL" : "SELFTEST: PASS")
     }
 

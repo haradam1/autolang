@@ -83,7 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         tapController.onWordBoundary = { [weak self] word, boundary in
             guard let self else { return }
-            if self.engine.autoConsider(word: word, boundary: boundary) {
+            if self.engine.processWord(word, boundary: boundary) {
                 self.tapController.armUndo()   // next backspace undoes it
                 self.refreshBadge()            // language may have flipped
             }
@@ -91,6 +91,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         tapController.onUndo = { [weak self] in
             self?.engine.revert()
             self?.refreshBadge()
+        }
+        tapController.onContextReset = { [weak self] in
+            self?.engine.resetContext()
         }
     }
 

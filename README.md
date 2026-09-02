@@ -70,9 +70,10 @@ Verify the core mapping without any GUI or permissions:
 ## Roadmap
 
 - **Phase 1:** hotkey convert, layout switch, menu-bar language badge, permission onboarding, never-buffer command chords. ✅
-- **Phase 2 — auto-detect:** ✅ done — `NSSpellChecker`-backed validity (English + Hebrew, with a Hebrew final-letter orthography guard), precision-first conversion on space, **language momentum** (multi-word context), **undo-on-backspace**, synthetic-event tagging, and **never-touch zones** (secure fields + excluded apps in `AppGuard.swift`). Cold-load race warmed up at init.
-  - Still open: **deferred/retroactive** conversion (hold an ambiguous word 1 turn, convert the run once the next word disambiguates) and a real **bigram** table (momentum is the lighter stand-in).
-- **Phase 2.5 — typo correction:** English (SymSpell/Hunspell), then conservative Hebrew (Hspell). Independent toggles already in the menu.
+- **Phase 2 — auto-detect:** ✅ `NSSpellChecker`-backed validity (English + Hebrew, with a Hebrew final-letter orthography guard), precision-first conversion on space, **language momentum** (multi-word context), **undo-on-backspace**, synthetic-event tagging, and **never-touch zones** (secure fields + excluded apps in `AppGuard.swift`). Cold-load race warmed up at init.
+- **Phase 2-tail — deferred/retroactive:** ✅ a truly ambiguous word (valid both ways, no run yet) is **held**; when the next word disambiguates the run, the held word is converted **retroactively** (one-word lookback = the "analyze 2 words" behavior). Backspace/Return/app-switch drop the lookback so we never rewrite the wrong span.
+  - Deferred still: a real **bigram frequency** table. Momentum + retroactive lookback already deliver the practical multi-word context; a bigram table would only refine same-language edge cases and needs an offline dataset. Left as a future refinement.
+- **Phase 2.5 — typo correction:** ✅ per-language toggles wired. English inserts elided apostrophes (`dont`→`don't`) and applies a conservative spelling guess (edit-distance ≤ 2); Hebrew guarded by orthography, off by default. Runs *after* the layout decision, only on the kept word, and is undoable like any edit.
 - **Phase 3 — polish:** user-editable per-app rules, learning dictionary, clipboard convert, pause/feedback, start-on-boot via `SMAppService`.
 - **Phase 4 — distribution:** Developer ID signing + notarization (not App Store eligible due to keystroke tap).
 

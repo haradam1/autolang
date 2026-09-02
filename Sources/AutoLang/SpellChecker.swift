@@ -79,4 +79,54 @@ final class SpellChecker {
         }
         return true
     }
+
+    // MARK: - Typo correction (Phase 2.5)
+
+    /// The apostrophe form of an English contraction typed without it, e.g.
+    /// "dont" -> "don't", or nil if there isn't one.
+    func contractionCorrection(_ word: String) -> String? {
+        let chars = Array(word)
+        guard chars.count >= 2, chars.count <= 20, chars.allSatisfy({ $0.isLetter }) else { return nil }
+        guard !dictionaryValid(word, .english) else { return nil }
+        for i in 1..<chars.count {
+            var candidate = chars
+            candidate.insert("'", at: i)
+            let s = String(candidate)
+            if dictionaryValid(s, .english) { return s }
+        }
+        return nil
+    }
+
+    /// The best spelling correction for a misspelled word, or nil if the word is
+    /// already valid or no close correction exists. Conservative: only accepts a
+    /// guess within edit distance 2 so we never wildly rewrite a word.
+    func topCorrection(_ word: String, _ lang: Language) -> String? {
+        guard let code = (lang == .hebrew) ? heLang : enLang else { return nil }
+        if lang == .hebrew, !hebrewOrthographyValid(word) { return nil } // don't "fix" gibberish
+        guard !dictionaryValid(word, lang) else { return nil }
+
+        let range = NSRange(location: 0, length: (word as NSString).length)
+        let guesses = checker.guesses(forWordRange: range, in: word, language: code,
+                                      inSpellDocumentWithTag: 0) ?? []
+        guard let best = guesses.first, editDistance(word, best) <= 2 else { return nil }
+        return best
+    }
+
+    /// Classic Levenshtein distance (small words, so the simple DP is fine).
+    private func editDistance(_ a: String, _ b: String) -> Int {
+        let x = Array(a), y = Array(b)
+        if x.isEmpty { return y.count }
+        if y.isEmpty { return x.count }
+        var prev = Array(0...y.count)
+        var cur = [Int](repeating: 0, count: y.count + 1)
+        for i in 1...x.count {
+            cur[0] = i
+            for j in 1...y.count {
+                let cost = x[i - 1] == y[j - 1] ? 0 : 1
+                cur[j] = min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost)
+            }
+            swap(&prev, &cur)
+        }
+        return prev[y.count]
+    }
 }
