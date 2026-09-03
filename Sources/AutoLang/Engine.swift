@@ -120,19 +120,38 @@ final class Engine {
     /// run just disambiguated (retroactive one-word lookback).
     private func convert(keycodes: [Int64], asTyped: String, other: String,
                          from: Language, to: Language) -> Bool {
-        var originalText = asTyped + " "
-        var correctedText = other + " "
-
+        // Fold in the deferred previous word only if it belongs to the same
+        // layout and renders to a real word in the target language.
+        var deferredAsTyped: String?
+        var deferredOther: String?
         if let d = deferred, d.from == from {
             let dOther = KeyMap.render(d.keycodes, as: to)
             if spell.isValid(dOther, to) {
-                originalText = d.asTyped + " " + originalText   // ...deferred word too
-                correctedText = dOther + " " + correctedText
+                deferredAsTyped = d.asTyped
+                deferredOther = dOther
             }
         }
+
+        let plan = Engine.planConvert(currentAsTyped: asTyped, currentOther: other,
+                                      deferredAsTyped: deferredAsTyped, deferredOther: deferredOther)
         deferred = nil
         momentum = to
-        return applyEdit(original: originalText, corrected: correctedText, newLang: to, restore: from)
+        return applyEdit(original: plan.original, corrected: plan.corrected, newLang: to, restore: from)
+    }
+
+    /// Pure: assembles the text spans a conversion replaces, folding in a
+    /// deferred previous word when present. When a deferred word is folded, the
+    /// replacement covers BOTH words — not just the current one. Exposed for test.
+    static func planConvert(currentAsTyped: String, currentOther: String,
+                            deferredAsTyped: String?, deferredOther: String?)
+        -> (original: String, corrected: String) {
+        var original = currentAsTyped + " "
+        var corrected = currentOther + " "
+        if let da = deferredAsTyped, let dOther = deferredOther {
+            original = da + " " + original      // deferred word + current word
+            corrected = dOther + " " + corrected
+        }
+        return (original, corrected)
     }
 
     private func applyEdit(original: String, corrected: String,

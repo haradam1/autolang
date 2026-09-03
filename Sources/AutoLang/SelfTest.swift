@@ -41,6 +41,18 @@ enum SelfTest {
         check("typo: helllo -> hello (spelling)", spell.topCorrection("helllo", .english) ?? "nil", "hello")
         check("typo: hello needs no correction", spell.topCorrection("hello", .english) ?? "nil", "nil")
 
+        // Retroactive fold: when the 2nd word disambiguates, BOTH words are in
+        // the replacement span — not only the second.
+        let solo = Engine.planConvert(currentAsTyped: "akuo", currentOther: "שלום",
+                                      deferredAsTyped: nil, deferredOther: nil)
+        check("plan solo: original is just word2", solo.original, "akuo ")
+        check("plan solo: corrected is just word2", solo.corrected, "שלום ")
+
+        let both = Engine.planConvert(currentAsTyped: "akuo", currentOther: "שלום",
+                                      deferredAsTyped: "vhs", deferredOther: "דבה")
+        check("plan retro: original covers BOTH words", both.original, "vhs akuo ")
+        check("plan retro: corrected covers BOTH words", both.corrected, "דבה שלום ")
+
         print(failed ? "SELFTEST: FAIL" : "SELFTEST: PASS")
     }
 
