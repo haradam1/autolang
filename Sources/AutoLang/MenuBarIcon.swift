@@ -7,14 +7,14 @@ import AppKit
 enum IconStyle: String, CaseIterable {
     case duo      // A · א monogram, active side emphasized
     case pill     // active letter inside a rounded badge
-    case ring     // active letter inside a coin/ring
+    case swap     // active letter wrapped by a circular (convert) arrow
     case classic  // speech bubble + EN/עב text (original)
 
     var title: String {
         switch self {
         case .duo:     return "Duo monogram  (A·א)"
         case .pill:    return "Pill badge"
-        case .ring:    return "Ring coin"
+        case .swap:    return "Swap arrow  (⟳)"
         case .classic: return "Classic bubble"
         }
     }
@@ -26,8 +26,8 @@ enum MenuBarIcon {
     static func image(language: Language, style: IconStyle) -> NSImage {
         switch style {
         case .duo:     return duo(language)
-        case .pill:    return framed(language, circle: false)
-        case .ring:    return framed(language, circle: true)
+        case .pill:    return framed(language)
+        case .swap:    return swapArrow(language)
         case .classic: return classic(language)
         }
     }
@@ -55,17 +55,48 @@ enum MenuBarIcon {
         }
     }
 
-    private static func framed(_ lang: Language, circle: Bool) -> NSImage {
-        make(width: circle ? 20 : 22) { r in
+    private static func framed(_ lang: Language) -> NSImage {
+        make(width: 22) { r in
             let box = r.insetBy(dx: 1.6, dy: 1.6)
-            let path = circle
-                ? NSBezierPath(ovalIn: box)
-                : NSBezierPath(roundedRect: box, xRadius: 5, yRadius: 5)
+            let path = NSBezierPath(roundedRect: box, xRadius: 5, yRadius: 5)
             path.lineWidth = 1.5
             NSColor.black.setStroke()
             path.stroke()
             text(lang == .hebrew ? "א" : "A", at: NSPoint(x: r.midX, y: r.midY - 0.5),
                  size: 11, weight: .semibold, alpha: 1)
+        }
+    }
+
+    /// The active letter wrapped by a circular arrow — the "convert" mark.
+    private static func swapArrow(_ lang: Language) -> NSImage {
+        make(width: 21) { r in
+            let c = NSPoint(x: r.midX, y: r.midY - 0.5)
+            let radius: CGFloat = 7.3
+            let endAngle: CGFloat = 70            // arc runs CCW from here...
+            let startAngle: CGFloat = 120         // ...all the way around to here (gap at top)
+
+            let arc = NSBezierPath()
+            arc.appendArc(withCenter: c, radius: radius, startAngle: startAngle, endAngle: endAngle, clockwise: true)
+            arc.lineWidth = 1.5
+            arc.lineCapStyle = .round
+            NSColor.black.setStroke()
+            arc.stroke()
+
+            // Arrowhead at the arc's end, pointing along the (clockwise) tangent.
+            let a = Double(endAngle) * .pi / 180
+            let ca = CGFloat(cos(a)), sa = CGFloat(sin(a))
+            let tip = NSPoint(x: c.x + radius * ca, y: c.y + radius * sa)
+            let tan = NSPoint(x: sa, y: -ca)   // clockwise tangent
+            let nrm = NSPoint(x: ca, y: sa)    // radial
+            let head = NSBezierPath()
+            head.move(to: NSPoint(x: tip.x + tan.x * 3.0, y: tip.y + tan.y * 3.0))
+            head.line(to: NSPoint(x: tip.x - tan.x * 1.6 + nrm.x * 2.4, y: tip.y - tan.y * 1.6 + nrm.y * 2.4))
+            head.line(to: NSPoint(x: tip.x - tan.x * 1.6 - nrm.x * 2.4, y: tip.y - tan.y * 1.6 - nrm.y * 2.4))
+            head.close()
+            NSColor.black.setFill()
+            head.fill()
+
+            text(lang == .hebrew ? "א" : "A", at: c, size: 9.5, weight: .bold, alpha: 1)
         }
     }
 
