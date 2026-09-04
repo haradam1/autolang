@@ -8,6 +8,8 @@ final class EventTapController {
 
     /// Manual-convert hotkey: Control+Option+H ("Hebrew/English"). Configurable later.
     private static let convertKeycode: Int64 = 0x04 // kVK_ANSI_H
+    /// Clipboard-convert hotkey: Control+Option+V.
+    private static let clipboardKeycode: Int64 = 0x09 // kVK_ANSI_V
 
     private let buffer = WordBuffer()
     private var tap: CFMachPort?
@@ -28,6 +30,9 @@ final class EventTapController {
     /// Called on a plain backspace (not an undo): the engine drops its
     /// retroactive lookback, since the on-screen text no longer matches.
     var onContextReset: (() -> Void)?
+
+    /// Called on the clipboard-convert hotkey (Control+Option+V).
+    var onClipboardConvert: (() -> Void)?
 
     /// Set by the engine right after an auto-conversion; the very next keystroke
     /// either triggers an undo (if it's backspace) or clears this.
@@ -112,6 +117,14 @@ final class EventTapController {
            !flags.contains(.maskCommand) {
             let word = buffer.current
             DispatchQueue.main.async { [weak self] in self?.onManualConvert?(word) }
+            return nil
+        }
+
+        // Clipboard-convert hotkey: Control+Option+V. Swallow it.
+        if keycode == Self.clipboardKeycode,
+           flags.contains(.maskControl), flags.contains(.maskAlternate),
+           !flags.contains(.maskCommand) {
+            DispatchQueue.main.async { [weak self] in self?.onClipboardConvert?() }
             return nil
         }
 

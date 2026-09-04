@@ -19,6 +19,8 @@ correction are scaffolded (toggles present) but not yet implemented.
 bash scripts/setup-signing.sh  # ONCE: stable signing identity so grants survive rebuilds
 bash scripts/build.sh          # produces AutoLang.app (compiles + bundles + signs)
 open AutoLang.app              # first run: grant Accessibility, then relaunch
+# or install into /Applications and launch from there:
+bash scripts/install.sh
 ```
 
 ### Signing / the re-grant treadmill
@@ -48,9 +50,11 @@ Verify the core mapping without any GUI or permissions:
 
 ## Use (Phase 1)
 
-- Type a word in the wrong layout.
-- Press **Control-Option-H** to convert the current word and switch the active
-  input source. (Press it before the space — committed-word conversion is Phase 2.)
+- Type a word in the wrong layout, then **⌃⌥H** to convert the current word and
+  switch the active input source.
+- **⌃⌥V** transliterates the **clipboard** EN⇄HE (fixes text pasted in the wrong layout).
+- Auto-detect (when on) converts as you type; a brief menu-bar **flash** confirms
+  each conversion (toggle: "Flash on convert").
 
 ## How it works
 

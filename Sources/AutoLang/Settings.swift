@@ -42,4 +42,10 @@ final class Settings {
         get { IconStyle(rawValue: defaults.string(forKey: "iconStyle") ?? "") ?? .duo }
         set { defaults.set(newValue.rawValue, forKey: "iconStyle") }
     }
+
+    /// Briefly tint the menu-bar icon when a conversion happens. On by default.
+    var flashOnConvert: Bool {
+        get { defaults.object(forKey: "flashOnConvert") == nil ? true : defaults.bool(forKey: "flashOnConvert") }
+        set { defaults.set(newValue, forKey: "flashOnConvert") }
+    }
 }

@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var tapRunning = false
     private var permissionTimer: Timer?
+    private var flashTimer: Timer?
 
     /// The last non-AutoLang app you were in, so the per-app menu can target it.
     private var lastActiveApp: (name: String, id: String)?
@@ -94,12 +95,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.engine.manualConvert(word: word)
             self?.tapController.resetCurrentWord()
             self?.refreshBadge()
+            self?.flash()
         }
         tapController.onWordBoundary = { [weak self] word, boundary in
             guard let self else { return }
             if self.engine.processWord(word, boundary: boundary) {
                 self.tapController.armUndo()   // next backspace undoes it
                 self.refreshBadge()            // language may have flipped
+                self.flash()
             }
         }
         tapController.onUndo = { [weak self] in
@@ -108,6 +111,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         tapController.onContextReset = { [weak self] in
             self?.engine.resetContext()
+        }
+        tapController.onClipboardConvert = { [weak self] in
+            if ClipboardConverter.convertPasteboard() { self?.flash() }
+        }
+    }
+
+    /// Briefly tint the menu-bar icon to acknowledge a conversion.
+    private func flash() {
+        guard Settings.shared.flashOnConvert, let button = statusItem?.button else { return }
+        flashTimer?.invalidate()
+        button.contentTintColor = .controlAccentColor
+        flashTimer = Timer.scheduledTimer(withTimeInterval: 0.18, repeats: false) { [weak button] _ in
+            button?.contentTintColor = nil
         }
     }
 
@@ -140,10 +156,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Convert current word", action: #selector(noopHotkeyHint), keyEquivalent: "")
-            .toolTip = "Hotkey: Control-Option-H"
-        menu.addItem(withTitle: "Convert clipboard (EN⇄HE)", action: #selector(convertClipboard), keyEquivalent: "")
-            .target = self
+        menu.addItem(withTitle: "Convert current word  (⌃⌥H)", action: #selector(noopHotkeyHint), keyEquivalent: "")
+            .toolTip = "Type a word, then press Control-Option-H"
+        let clip = NSMenuItem(title: "Convert clipboard  (⌃⌥V)", action: #selector(convertClipboard), keyEquivalent: "")
+        clip.target = self
+        clip.toolTip = "Transliterate the clipboard EN⇄HE"
+        menu.addItem(clip)
 
         menu.addItem(.separator())
         addToggle(to: menu, title: "Auto-detect & convert", isOn: Settings.shared.autoConvert,
@@ -152,6 +170,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                   action: #selector(toggleTypoEN))
         addToggle(to: menu, title: "Fix typos (Hebrew)", isOn: Settings.shared.typoCorrectHE,
                   action: #selector(toggleTypoHE))
+        addToggle(to: menu, title: "Flash on convert", isOn: Settings.shared.flashOnConvert,
+                  action: #selector(toggleFlash))
         addToggle(to: menu, title: "Pause", isOn: Settings.shared.paused,
                   action: #selector(togglePause))
 
@@ -365,4 +385,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func toggleTypoEN() { Settings.shared.typoCorrectEN.toggle(); buildMenu() }
     @objc private func toggleTypoHE() { Settings.shared.typoCorrectHE.toggle(); buildMenu() }
     @objc private func togglePause() { Settings.shared.paused.toggle(); buildMenu() }
+    @objc private func toggleFlash() { Settings.shared.flashOnConvert.toggle(); buildMenu() }
 }
