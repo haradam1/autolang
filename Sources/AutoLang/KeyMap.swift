@@ -69,15 +69,28 @@ enum KeyMap {
     /// Is this a keycode we know how to render in both languages?
     static func isMappable(_ keycode: Int64) -> Bool { table[keycode] != nil }
 
-    /// Render a sequence of keycodes as a string in the requested language.
-    static func render(_ keycodes: [Int64], as lang: Language) -> String {
+    /// Render a sequence of keystrokes as a string in the requested language.
+    /// Shift state is applied as capitalization for English (Hebrew has no case).
+    static func render(_ keystrokes: [Keystroke], as lang: Language) -> String {
         var out = ""
-        for kc in keycodes {
-            guard let e = table[kc] else { continue }
-            out.append(lang == .hebrew ? e.he : e.en)
+        for k in keystrokes {
+            guard let e = table[k.code] else { continue }
+            let ch = lang == .hebrew ? e.he : e.en
+            if k.shifted, lang == .english {
+                out += String(ch).uppercased()
+            } else {
+                out.append(ch)
+            }
         }
         return out
     }
+}
+
+/// One physical key press: which key, and whether it was shifted (so we can
+/// preserve the user's capitalization through a conversion or typo fix).
+struct Keystroke {
+    let code: Int64
+    let shifted: Bool
 }
 
 enum Language {

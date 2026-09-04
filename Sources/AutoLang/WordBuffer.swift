@@ -1,28 +1,20 @@
 import Foundation
 
-/// Accumulates the keycodes of the word currently being typed.
-///
-/// Phase 1 only needs "the word in progress" so the manual-convert hotkey can
-/// re-render it. Phase 2 grows this into the sliding multi-word window that the
-/// language state machine reasons over (momentum + deferred/retroactive convert).
+/// Accumulates the keystrokes of the word currently being typed (keycode +
+/// shift state, so capitalization survives a conversion).
 final class WordBuffer {
-    /// Keycodes of the in-progress word, in type order. Only mappable keys are
-    /// stored, so `count` == number of visible characters we'd need to delete.
-    private(set) var current: [Int64] = []
-
-    /// The last completed word (flushed at a boundary). Kept for a future
-    /// "convert the word I just finished" path; unused in the Phase 1 flow.
-    private(set) var previous: [Int64] = []
+    private(set) var current: [Keystroke] = []
+    private(set) var previous: [Keystroke] = []
 
     var isEmpty: Bool { current.isEmpty }
     var length: Int { current.count }
 
-    func append(keycode: Int64) {
-        if KeyMap.isMappable(keycode) {
-            current.append(keycode)
+    func append(_ keystroke: Keystroke) {
+        if KeyMap.isMappable(keystroke.code) {
+            current.append(keystroke)
         } else {
             // A non-mappable key mid-word (e.g. a digit) breaks the run so we
-            // don't mis-transliterate. Conservative for the skeleton.
+            // don't mis-transliterate.
             flush()
         }
     }

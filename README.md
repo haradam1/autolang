@@ -63,7 +63,8 @@ Verify the core mapping without any GUI or permissions:
 | Text replacement | `TextInjector.swift` | backspaces + unicode injection (needs Accessibility); tags its own events |
 | Word validity | `SpellChecker.swift` | `NSSpellChecker` EN/HE + Hebrew final-letter orthography guard |
 | Skip zones | `AppGuard.swift` | secure fields + excluded apps (terminals, editors, password mgrs) |
-| Orchestration | `Engine.swift` | manual + auto convert, momentum, undo/revert |
+| Personal dict | `UserDictionary.swift` | protected words (never touched); auto-learns from your undos |
+| Orchestration | `Engine.swift` | manual + auto convert, momentum, multi-word run, typo fix, undo/revert |
 | Menu bar / onboarding | `AppDelegate.swift` | status item, badge, toggles, permission flow |
 | Toggles | `Settings.swift` | auto-convert / typo EN / typo HE / pause (persisted) |
 
@@ -73,7 +74,11 @@ Verify the core mapping without any GUI or permissions:
 - **Phase 2 — auto-detect:** ✅ `NSSpellChecker`-backed validity (English + Hebrew, with a Hebrew final-letter orthography guard), precision-first conversion on space, **language momentum** (multi-word context), **undo-on-backspace**, synthetic-event tagging, and **never-touch zones** (secure fields + excluded apps in `AppGuard.swift`). Cold-load race warmed up at init.
 - **Phase 2-tail — deferred/retroactive:** ✅ a truly ambiguous word (valid both ways, no run yet) is **held**; when the next word disambiguates the run, the held word is converted **retroactively** (one-word lookback = the "analyze 2 words" behavior). Backspace/Return/app-switch drop the lookback so we never rewrite the wrong span.
   - Deferred still: a real **bigram frequency** table. Momentum + retroactive lookback already deliver the practical multi-word context; a bigram table would only refine same-language edge cases and needs an offline dataset. Left as a future refinement.
-- **Phase 2.5 — typo correction:** ✅ per-language toggles wired. English inserts elided apostrophes (`dont`→`don't`) and applies a conservative spelling guess (edit-distance ≤ 2); Hebrew guarded by orthography, off by default. Runs *after* the layout decision, only on the kept word, and is undoable like any edit.
+- **Phase 2.5 — typo correction:** ✅ per-language toggles. English inserts elided apostrophes from a **curated contraction list** (`dont`→`don't`, ambiguous bares like `were`/`its` left alone) and applies **safe-only** spelling fixes — repeated-letter collapse (`helllo`→`hello`) and adjacent transposition (`teh`→`the`, `recieve`→`receive`) — so names like `yaron` are never mangled. Hebrew guarded by orthography, off by default. Case preserved, undoable.
+- **Quality pass (v0.4.0):**
+  - **Capitalization preserved** — the buffer tracks shift/caps per key, so `Shalom`→Hebrew and typo fixes keep your casing (`Helllo`→`Hello`).
+  - **Multi-word run** — ambiguous leading words are held as a *run* (up to 8), and the whole phrase flips once a later word disambiguates; digits/punctuation/double-space/backspace reset the run so spans stay valid.
+  - **Personal dictionary** (`UserDictionary.swift`) — undo a conversion and that word is protected forever (never auto-changed); managed from the menu.
 - **Phase 3 — polish:** user-editable per-app rules, learning dictionary, clipboard convert, pause/feedback, start-on-boot via `SMAppService`.
 - **Phase 4 — distribution:** Developer ID signing + notarization (not App Store eligible due to keystroke tap).
 

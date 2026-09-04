@@ -14,12 +14,12 @@ final class EventTapController {
     private var runLoopSource: CFRunLoopSource?
 
     /// Called when the user presses the manual-convert hotkey. Passes the
-    /// keycodes of the current word so the engine can re-render + switch.
-    var onManualConvert: (([Int64]) -> Void)?
+    /// keystrokes of the current word so the engine can re-render + switch.
+    var onManualConvert: (([Keystroke]) -> Void)?
 
-    /// Called on every committed word boundary: (word keycodes, boundary keycode).
+    /// Called on every committed word boundary: (word keystrokes, boundary keycode).
     /// The engine decides whether to auto-convert.
-    var onWordBoundary: (([Int64], Int64) -> Void)?
+    var onWordBoundary: (([Keystroke], Int64) -> Void)?
 
     /// Called when the user presses backspace immediately after an auto-convert:
     /// the engine reverts it. Carries whatever the engine armed via `armUndo`.
@@ -127,18 +127,25 @@ final class EventTapController {
             return Unmanaged.passUnretained(event)
         }
 
-        // Word boundary: flush and notify the auto-detector.
+        // Word boundary: flush and notify the auto-detector. An empty boundary
+        // (double space, etc.) breaks contiguity, so reset the retro run.
         if KeyMap.wordBoundaryKeycodes.contains(keycode) {
             let finished = buffer.current
             buffer.flush()
-            if !finished.isEmpty {
-                DispatchQueue.main.async { [weak self] in self?.onWordBoundary?(finished, keycode) }
+            DispatchQueue.main.async { [weak self] in
+                if finished.isEmpty { self?.onContextReset?() }
+                else { self?.onWordBoundary?(finished, keycode) }
             }
             return Unmanaged.passUnretained(event)
         }
 
-        // Ordinary key: accumulate.
-        buffer.append(keycode: keycode)
+        // Ordinary key: accumulate. Effective uppercase = shift XOR caps-lock.
+        // A non-mappable key (digit/symbol) breaks the run — reset the retro span.
+        if !KeyMap.isMappable(keycode) {
+            DispatchQueue.main.async { [weak self] in self?.onContextReset?() }
+        }
+        let shifted = flags.contains(.maskShift) != flags.contains(.maskAlphaShift)
+        buffer.append(Keystroke(code: keycode, shifted: shifted))
         return Unmanaged.passUnretained(event)
     }
 }

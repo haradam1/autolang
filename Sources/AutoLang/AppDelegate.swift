@@ -147,6 +147,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                   action: #selector(togglePause))
 
         menu.addItem(.separator())
+        let learned = NSMenuItem(title: "Learned words: \(engine.learnedCount)", action: nil, keyEquivalent: "")
+        learned.isEnabled = false
+        learned.toolTip = "Words you protected by undoing a conversion — never auto-changed."
+        menu.addItem(learned)
+        if engine.learnedCount > 0 {
+            menu.addItem(withTitle: "Forget learned words", action: #selector(forgetLearned), keyEquivalent: "")
+                .target = self
+        }
+
+        menu.addItem(.separator())
         menu.addItem(withTitle: "Quit AutoLang", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
         statusItem.menu = menu
@@ -167,6 +177,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func noopHotkeyHint() {}
+
+    @objc private func forgetLearned() { engine.forgetLearned(); buildMenu() }
 
     @objc private func toggleAuto() { Settings.shared.autoConvert.toggle(); buildMenu() }
     @objc private func toggleTypoEN() { Settings.shared.typoCorrectEN.toggle(); buildMenu() }

@@ -1,173 +1,170 @@
 import Foundation
 
-/// Decides and performs edits at each word boundary: layout conversion (with a
-/// one-word retroactive lookback), language momentum, and typo correction —
-/// all expressed as "replace a trailing region of text", so a single undo path
-/// covers every kind of edit.
+/// Decides and performs edits at each word boundary: layout conversion with a
+/// multi-word deferred run (so short/ambiguous words are judged in phrase
+/// context), language momentum, typo correction, capitalization preservation,
+/// and a personal dictionary that learns from your undos.
 final class Engine {
     private let inputSources = InputSourceManager()
     private let injector = TextInjector()
     private let spell = SpellChecker()
     private let appGuard = AppGuard()
+    private let dictionary = UserDictionary()
 
     private static let spaceKeycode: Int64 = 0x31
+    private static let maxPending = 8 // bound the retroactive span
 
-    /// Language momentum: the language of the run we're in. A single ambiguous
-    /// word is decided in favor of the language you've clearly been writing.
+    /// The language of the run we're in. A single ambiguous word follows the
+    /// language you've clearly been writing rather than being judged alone.
     private var momentum: Language?
 
-    /// A held ambiguous word (valid in both languages) whose language we can't
-    /// decide yet. If the NEXT word disambiguates the run, we convert this one
-    /// retroactively. One-word lookback — this is the "analyze 2 words" behavior.
-    private var deferred: (keycodes: [Int64], asTyped: String, from: Language)?
+    /// Held ambiguous words (valid in both languages) with no run established
+    /// yet — a contiguous trailing run. When a later word disambiguates, the
+    /// whole run is converted retroactively. This is the multi-word context.
+    private struct Pending { let keystrokes: [Keystroke]; let asTyped: String; let from: Language }
+    private var pending: [Pending] = []
 
-    /// The last text edit we made, for one-press undo. Works for conversions,
-    /// retroactive conversions, and typo fixes alike.
+    /// The last text edit, for one-press undo (and to learn from it).
     private struct Edit {
-        let originalText: String   // what was on screen before (incl. trailing space)
-        let correctedText: String  // what we replaced it with (incl. trailing space)
-        let restoreLang: Language  // input source to restore on undo
+        let originalText: String
+        let correctedText: String
+        let restoreLang: Language
+        let sourceWords: [String] // as-typed words this edit touched
     }
     private var lastEdit: Edit?
 
+    // Menu surface for the personal dictionary.
+    var learnedCount: Int { dictionary.count }
+    func forgetLearned() { dictionary.forgetAll() }
+
     // MARK: - Manual convert (⌃⌥H)
 
-    func manualConvert(word keycodes: [Int64]) {
-        guard !keycodes.isEmpty, !Settings.shared.paused else { return }
+    func manualConvert(word keystrokes: [Keystroke]) {
+        guard !keystrokes.isEmpty, !Settings.shared.paused else { return }
         let from = inputSources.currentLanguage()
         let to = from.other
-        let corrected = KeyMap.render(keycodes, as: to)
+        let corrected = KeyMap.render(keystrokes, as: to)
         guard !corrected.isEmpty else { return }
 
-        injector.replace(deleting: keycodes.count, with: corrected)
+        injector.replace(deleting: keystrokes.count, with: corrected)
         inputSources.select(to)
         momentum = to
-        deferred = nil
-        lastEdit = nil // manual is explicit; not part of the auto-undo flow
+        pending.removeAll()
+        lastEdit = nil
     }
 
-    // MARK: - Context reset (backspace, cursor moves we can observe)
-
-    /// Called when the user edits in a way that breaks our on-screen position
-    /// assumptions (e.g. backspace). Drops the retroactive lookback so we never
-    /// delete the wrong span.
-    func resetContext() { deferred = nil }
+    /// Backspace / cursor move: drop the retroactive run so we never rewrite the
+    /// wrong span.
+    func resetContext() { pending.removeAll() }
 
     // MARK: - Word boundary
 
-    /// Process a just-completed word. Returns true if we changed the text (so the
-    /// caller arms undo + refreshes the badge).
-    func processWord(_ keycodes: [Int64], boundary: Int64) -> Bool {
+    func processWord(_ keystrokes: [Keystroke], boundary: Int64) -> Bool {
         guard !Settings.shared.paused else { return false }
-        // Only space-terminated words are safe to rewrite; Return/Tab end a run.
-        if boundary != Self.spaceKeycode { deferred = nil; return false }
-        guard keycodes.count >= 2 else { deferred = nil; return false }
-        guard !appGuard.autoConvertBlocked() else { deferred = nil; return false }
+        if boundary != Self.spaceKeycode { pending.removeAll(); return false }
+        guard keystrokes.count >= 2 else { pending.removeAll(); return false }
+        guard !appGuard.autoConvertBlocked() else { pending.removeAll(); return false }
 
         let from = inputSources.currentLanguage()
         let to = from.other
-        let asTyped = KeyMap.render(keycodes, as: from)
-        let other = KeyMap.render(keycodes, as: to)
-        guard !asTyped.isEmpty, !other.isEmpty else { deferred = nil; return false }
+        let asTyped = KeyMap.render(keystrokes, as: from)
+        let other = KeyMap.render(keystrokes, as: to)
+        guard !asTyped.isEmpty, !other.isEmpty else { pending.removeAll(); return false }
+
+        // Personal dictionary: never touch a word you've protected.
+        if dictionary.isProtected(asTyped) { pending.removeAll(); momentum = from; return false }
 
         let validSelf = spell.isValid(asTyped, from)
         let validOther = spell.isValid(other, to)
 
-        // --- Layout conversion (if enabled) ---
         if Settings.shared.autoConvert {
             if !validSelf, validOther {
-                return convert(keycodes: keycodes, asTyped: asTyped, other: other, from: from, to: to)
+                return convertRun(asTyped: asTyped, other: other, from: from, to: to)
             } else if validSelf, validOther {
-                switch momentum {
-                case to:   // run is already the other language — flip this one too
-                    return convert(keycodes: keycodes, asTyped: asTyped, other: other, from: from, to: to)
-                case from: // consistent with the run — keep, then consider a typo fix
-                    deferred = nil
-                case nil:  // truly ambiguous, no run yet — hold for the next word
-                    deferred = (keycodes, asTyped, from)
+                if momentum == to {
+                    return convertRun(asTyped: asTyped, other: other, from: from, to: to)
+                } else if momentum == from {
+                    pending.removeAll()            // consistent with the run — keep
+                } else {
+                    defer_(keystrokes, asTyped, from) // ambiguous, no run yet — hold
                     return false
-                default:
-                    deferred = nil
                 }
             } else if validSelf, !validOther {
-                momentum = from; deferred = nil // definitely this language
+                momentum = from; pending.removeAll() // definitely this language
             } else {
-                deferred = nil // gibberish both ways (name?) — leave for typo maybe
+                pending.removeAll()                  // gibberish both ways — leave for typo
             }
+        } else {
+            pending.removeAll()
         }
 
-        // --- Typo correction (if enabled for this language) ---
+        // Typo correction on the committed current word (if enabled & not protected).
         if typoEnabled(from), let fixed = correction(for: asTyped, lang: from), fixed != asTyped {
-            return applyEdit(original: asTyped + " ", corrected: fixed + " ",
-                             newLang: from, restore: from)
+            return applyEdit(asTyped: [asTyped], corrected: [fixed], newLang: from, restore: from)
         }
         return false
     }
 
-    /// Undo the most recent auto-edit (user hit backspace right after).
+    /// Undo the most recent auto-edit, and LEARN from it: the reverted words are
+    /// protected so we won't convert/correct them again.
     func revert() {
         guard let e = lastEdit else { return }
         lastEdit = nil
         injector.replace(deleting: e.correctedText.count, with: e.originalText)
         inputSources.select(e.restoreLang)
         momentum = e.restoreLang
-        deferred = nil
+        pending.removeAll()
+        for w in e.sourceWords { dictionary.protect(w) }
     }
 
     // MARK: - Internals
 
-    /// Convert `keycodes` from→to, folding in the deferred previous word when the
-    /// run just disambiguated (retroactive one-word lookback).
-    private func convert(keycodes: [Int64], asTyped: String, other: String,
-                         from: Language, to: Language) -> Bool {
-        // Fold in the deferred previous word only if it belongs to the same
-        // layout and renders to a real word in the target language.
-        var deferredAsTyped: String?
-        var deferredOther: String?
-        if let d = deferred, d.from == from {
-            let dOther = KeyMap.render(d.keycodes, as: to)
-            if spell.isValid(dOther, to) {
-                deferredAsTyped = d.asTyped
-                deferredOther = dOther
-            }
+    /// Convert the current word, folding in the contiguous suffix of the pending
+    /// run whose target-language render is valid (so the whole phrase flips).
+    private func convertRun(asTyped: String, other: String, from: Language, to: Language) -> Bool {
+        var foldAsTyped: [String] = []
+        var foldCorrected: [String] = []
+        for p in pending.reversed() {
+            guard p.from == from else { break }
+            let pOther = KeyMap.render(p.keystrokes, as: to)
+            if spell.isValid(pOther, to) {
+                foldAsTyped.insert(p.asTyped, at: 0)
+                foldCorrected.insert(pOther, at: 0)
+            } else { break }
         }
-
-        let plan = Engine.planConvert(currentAsTyped: asTyped, currentOther: other,
-                                      deferredAsTyped: deferredAsTyped, deferredOther: deferredOther)
-        deferred = nil
+        pending.removeAll()
         momentum = to
-        return applyEdit(original: plan.original, corrected: plan.corrected, newLang: to, restore: from)
+        return applyEdit(asTyped: foldAsTyped + [asTyped],
+                         corrected: foldCorrected + [other],
+                         newLang: to, restore: from)
     }
 
-    /// Pure: assembles the text spans a conversion replaces, folding in a
-    /// deferred previous word when present. When a deferred word is folded, the
-    /// replacement covers BOTH words — not just the current one. Exposed for test.
-    static func planConvert(currentAsTyped: String, currentOther: String,
-                            deferredAsTyped: String?, deferredOther: String?)
-        -> (original: String, corrected: String) {
-        var original = currentAsTyped + " "
-        var corrected = currentOther + " "
-        if let da = deferredAsTyped, let dOther = deferredOther {
-            original = da + " " + original      // deferred word + current word
-            corrected = dOther + " " + corrected
-        }
-        return (original, corrected)
+    private func defer_(_ keystrokes: [Keystroke], _ asTyped: String, _ from: Language) {
+        if pending.count >= Self.maxPending { pending.removeAll() } // cap the span
+        pending.append(Pending(keystrokes: keystrokes, asTyped: asTyped, from: from))
     }
 
-    private func applyEdit(original: String, corrected: String,
+    private func applyEdit(asTyped: [String], corrected: [String],
                            newLang: Language, restore: Language) -> Bool {
-        injector.replace(deleting: original.count, with: corrected)
+        let plan = Engine.planConvert(asTyped: asTyped, corrected: corrected)
+        injector.replace(deleting: plan.original.count, with: plan.corrected)
         inputSources.select(newLang)
-        lastEdit = Edit(originalText: original, correctedText: corrected, restoreLang: restore)
+        lastEdit = Edit(originalText: plan.original, correctedText: plan.corrected,
+                        restoreLang: restore, sourceWords: asTyped)
         return true
+    }
+
+    /// Pure: assembles the (original, corrected) text spans for an edit covering
+    /// one or more consecutive words. Exposed for testing.
+    static func planConvert(asTyped: [String], corrected: [String])
+        -> (original: String, corrected: String) {
+        (asTyped.joined(separator: " ") + " ", corrected.joined(separator: " ") + " ")
     }
 
     private func typoEnabled(_ lang: Language) -> Bool {
         lang == .hebrew ? Settings.shared.typoCorrectHE : Settings.shared.typoCorrectEN
     }
 
-    /// Best correction for a word in its (already-decided) language: apostrophe
-    /// contractions first, then a conservative spelling guess.
     private func correction(for word: String, lang: Language) -> String? {
         if lang == .english, let c = spell.contractionCorrection(word) { return c }
         return spell.topCorrection(word, lang)
