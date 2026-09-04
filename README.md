@@ -79,7 +79,7 @@ Verify the core mapping without any GUI or permissions:
   - **Capitalization preserved** — the buffer tracks shift/caps per key, so `Shalom`→Hebrew and typo fixes keep your casing (`Helllo`→`Hello`).
   - **Multi-word run** — ambiguous leading words are held as a *run* (up to 8), and the whole phrase flips once a later word disambiguates; digits/punctuation/double-space/backspace reset the run so spans stay valid.
   - **Personal dictionary** (`UserDictionary.swift`) — undo a conversion and that word is protected forever (never auto-changed); managed from the menu.
-- **Phase 3 — polish:** user-editable per-app rules, learning dictionary, clipboard convert, pause/feedback, start-on-boot via `SMAppService`.
+- **Phase 3 — polish (in progress):** ✅ version shown in menu (`AppInfo.swift`), ✅ browsable **learned-words** submenu with per-word delete, ✅ **statistics** — inline menu summary with block-bar top-words plus a self-contained HTML **dashboard** (`StatsReport.swift`, "Open detailed stats…"). Still to do: user-editable per-app rules, clipboard convert, start-on-boot via `SMAppService`.
 - **Phase 4 — distribution:** Developer ID signing + notarization (not App Store eligible due to keystroke tap).
 
 ## Privacy

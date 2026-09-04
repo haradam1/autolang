@@ -27,6 +27,14 @@ final class UserDictionary {
         if words.insert(w).inserted { persist() }
     }
 
+    /// All protected words, alphabetically — for the menu listing.
+    func allWords() -> [String] { words.sorted() }
+
+    /// Remove one word from the dictionary.
+    func remove(_ word: String) {
+        if words.remove(word.lowercased()) != nil { persist() }
+    }
+
     func forgetAll() {
         words.removeAll()
         persist()

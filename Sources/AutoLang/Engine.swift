@@ -35,6 +35,8 @@ final class Engine {
 
     // Menu surface for the personal dictionary.
     var learnedCount: Int { dictionary.count }
+    func learnedWords() -> [String] { dictionary.allWords() }
+    func removeLearned(_ word: String) { dictionary.remove(word) }
     func forgetLearned() { dictionary.forgetAll() }
 
     // MARK: - Manual convert (⌃⌥H)
@@ -51,6 +53,7 @@ final class Engine {
         momentum = to
         pending.removeAll()
         lastEdit = nil
+        Stats.shared.recordConversion(words: [corrected], to: to, manual: true)
     }
 
     /// Backspace / cursor move: drop the retroactive run so we never rewrite the
@@ -100,6 +103,7 @@ final class Engine {
 
         // Typo correction on the committed current word (if enabled & not protected).
         if typoEnabled(from), let fixed = correction(for: asTyped, lang: from), fixed != asTyped {
+            Stats.shared.recordTypo(word: fixed)
             return applyEdit(asTyped: [asTyped], corrected: [fixed], newLang: from, restore: from)
         }
         return false
@@ -115,6 +119,7 @@ final class Engine {
         momentum = e.restoreLang
         pending.removeAll()
         for w in e.sourceWords { dictionary.protect(w) }
+        Stats.shared.recordUndo()
     }
 
     // MARK: - Internals
@@ -134,8 +139,10 @@ final class Engine {
         }
         pending.removeAll()
         momentum = to
+        let correctedWords = foldCorrected + [other]
+        Stats.shared.recordConversion(words: correctedWords, to: to)
         return applyEdit(asTyped: foldAsTyped + [asTyped],
-                         corrected: foldCorrected + [other],
+                         corrected: correctedWords,
                          newLang: to, restore: from)
     }
 

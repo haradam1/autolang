@@ -121,10 +121,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func buildMenu() {
         let menu = NSMenu()
 
-        let status = tapRunning ? "AutoLang: active" : "AutoLang: needs Accessibility permission"
-        let statusItemEntry = NSMenuItem(title: status, action: nil, keyEquivalent: "")
-        statusItemEntry.isEnabled = false
-        menu.addItem(statusItemEntry)
+        // Version + live status.
+        let state = tapRunning ? "active" : "needs Accessibility permission"
+        let header = NSMenuItem(title: "\(AppInfo.titled) · \(state)", action: nil, keyEquivalent: "")
+        header.isEnabled = false
+        menu.addItem(header)
 
         if !tapRunning {
             menu.addItem(withTitle: "Open Accessibility settings…",
@@ -147,19 +148,76 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                   action: #selector(togglePause))
 
         menu.addItem(.separator())
-        let learned = NSMenuItem(title: "Learned words: \(engine.learnedCount)", action: nil, keyEquivalent: "")
-        learned.isEnabled = false
-        learned.toolTip = "Words you protected by undoing a conversion — never auto-changed."
-        menu.addItem(learned)
-        if engine.learnedCount > 0 {
-            menu.addItem(withTitle: "Forget learned words", action: #selector(forgetLearned), keyEquivalent: "")
-                .target = self
-        }
+        menu.addItem(dictionarySubmenuItem())
+        menu.addItem(statisticsSubmenuItem())
 
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit AutoLang", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
         statusItem.menu = menu
+    }
+
+    // MARK: - Learned words submenu (browse + delete per word)
+
+    private func dictionarySubmenuItem() -> NSMenuItem {
+        let item = NSMenuItem(title: "Learned words (\(engine.learnedCount))", action: nil, keyEquivalent: "")
+        let sub = NSMenu()
+
+        let words = engine.learnedWords()
+        if words.isEmpty {
+            let empty = NSMenuItem(title: "None yet — undo a conversion to protect a word", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            sub.addItem(empty)
+        } else {
+            let hint = NSMenuItem(title: "Click a word to remove it", action: nil, keyEquivalent: "")
+            hint.isEnabled = false
+            sub.addItem(hint)
+            sub.addItem(.separator())
+            for w in words {
+                let wi = NSMenuItem(title: "✕  \(w)", action: #selector(removeLearnedWord(_:)), keyEquivalent: "")
+                wi.target = self
+                wi.representedObject = w
+                wi.toolTip = "Remove “\(w)” — AutoLang may convert/correct it again"
+                sub.addItem(wi)
+            }
+            sub.addItem(.separator())
+            sub.addItem(withTitle: "Forget all", action: #selector(forgetLearned), keyEquivalent: "").target = self
+        }
+        item.submenu = sub
+        return item
+    }
+
+    // MARK: - Statistics submenu
+
+    private func statisticsSubmenuItem() -> NSMenuItem {
+        let item = NSMenuItem(title: "Statistics", action: nil, keyEquivalent: "")
+        let sub = NSMenu()
+        let d = Stats.shared.data
+
+        func info(_ title: String) { let i = NSMenuItem(title: title, action: nil, keyEquivalent: ""); i.isEnabled = false; sub.addItem(i) }
+
+        info("Total conversions: \(d.total)")
+        info("   EN → HE: \(d.enToHe)   HE → EN: \(d.heToEn)")
+        info("Typo fixes: \(d.typoFixes)   Manual: \(d.manualConverts)   Undos: \(d.undos)")
+
+        let top = Stats.shared.topWords(limit: 5)
+        if !top.isEmpty {
+            sub.addItem(.separator())
+            info("Top words")
+            let maxCount = max(top.first?.count ?? 1, 1)
+            for t in top {
+                let filled = Int((Double(t.count) / Double(maxCount) * 10).rounded())
+                let bar = String(repeating: "▉", count: max(filled, 1)) + String(repeating: "·", count: 10 - max(filled, 1))
+                info("  \(bar)  \(t.word) (\(t.count))")
+            }
+        }
+
+        sub.addItem(.separator())
+        sub.addItem(withTitle: "Open detailed stats…", action: #selector(openDetailedStats), keyEquivalent: "").target = self
+        sub.addItem(withTitle: "Reset statistics", action: #selector(resetStats), keyEquivalent: "").target = self
+
+        item.submenu = sub
+        return item
     }
 
     private func addToggle(to menu: NSMenu, title: String, isOn: Bool, action: Selector) {
@@ -179,6 +237,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func noopHotkeyHint() {}
 
     @objc private func forgetLearned() { engine.forgetLearned(); buildMenu() }
+
+    @objc private func removeLearnedWord(_ sender: NSMenuItem) {
+        guard let word = sender.representedObject as? String else { return }
+        engine.removeLearned(word)
+        buildMenu()
+    }
+
+    @objc private func resetStats() { Stats.shared.reset(); buildMenu() }
+
+    @objc private func openDetailedStats() {
+        let html = StatsReport.html(from: Stats.shared.data, top: Stats.shared.topWords(limit: 15))
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("AutoLang", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("stats.html")
+        do {
+            try html.write(to: url, atomically: true, encoding: .utf8)
+            NSWorkspace.shared.open(url)
+        } catch {
+            NSLog("AutoLang: failed to write stats report: \(error)")
+        }
+    }
 
     @objc private func toggleAuto() { Settings.shared.autoConvert.toggle(); buildMenu() }
     @objc private func toggleTypoEN() { Settings.shared.typoCorrectEN.toggle(); buildMenu() }
