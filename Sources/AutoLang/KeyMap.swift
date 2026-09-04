@@ -64,6 +64,19 @@ enum KeyMap {
         0x35  // escape
     ]
 
+    /// Character-level maps (built from `table`) for converting existing text —
+    /// e.g. the clipboard — where we have characters, not keycodes.
+    static let enToHeChar: [Character: Character] = {
+        var m: [Character: Character] = [:]
+        for e in table.values { m[e.en] = e.he }
+        return m
+    }()
+    static let heToEnChar: [Character: Character] = {
+        var m: [Character: Character] = [:]
+        for e in table.values { m[e.he] = e.en }
+        return m
+    }()
+
     static func entry(for keycode: Int64) -> Entry? { table[keycode] }
 
     /// Is this a keycode we know how to render in both languages?

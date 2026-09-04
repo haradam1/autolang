@@ -20,7 +20,7 @@ mkdir -p "$MACOS"
 swiftc -swift-version 5 -O \
     -o "$BIN" \
     "$ROOT"/Sources/AutoLang/*.swift \
-    -framework AppKit -framework Carbon -framework CoreGraphics
+    -framework AppKit -framework Carbon -framework CoreGraphics -framework ServiceManagement
 
 echo "› assembling bundle…"
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"

@@ -36,4 +36,10 @@ final class Settings {
         get { defaults.bool(forKey: Key.paused) }
         set { defaults.set(newValue, forKey: Key.paused) }
     }
+
+    /// Menu-bar brand icon style.
+    var iconStyle: IconStyle {
+        get { IconStyle(rawValue: defaults.string(forKey: "iconStyle") ?? "") ?? .duo }
+        set { defaults.set(newValue.rawValue, forKey: "iconStyle") }
+    }
 }

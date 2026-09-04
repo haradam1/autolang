@@ -16,6 +16,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var tapRunning = false
     private var permissionTimer: Timer?
 
+    /// The last non-AutoLang app you were in, so the per-app menu can target it.
+    private var lastActiveApp: (name: String, id: String)?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory) // no Dock icon (LSUIElement behavior)
 
@@ -33,8 +36,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil
         )
 
+        // Remember the app you were typing in (for the per-app menu).
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self, selector: #selector(appActivated(_:)),
+            name: NSWorkspace.didActivateApplicationNotification, object: nil)
+
         wireEngine()
         startTapIfPermitted()
+    }
+
+    @objc private func appActivated(_ note: Notification) {
+        guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+              let id = app.bundleIdentifier, id != Bundle.main.bundleIdentifier else { return }
+        lastActiveApp = (name: app.localizedName ?? id, id: id)
     }
 
     // MARK: - Permissions
@@ -101,19 +115,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func refreshBadge() {
         guard let button = statusItem.button else { return }
-        let lang = inputSources.currentLanguage()
-
-        // A real menu-bar glyph so presence is obvious at a glance:
-        //  • active  -> speech-bubble with a character (we're watching input)
-        //  • blocked -> warning triangle (needs Accessibility)
-        let symbol = tapRunning ? "character.bubble.fill" : "exclamationmark.triangle.fill"
-        let describe = tapRunning ? "AutoLang active" : "AutoLang needs Accessibility permission"
-        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: describe)
-        image?.isTemplate = true // adapts to light/dark menu bar
-
-        button.image = image
-        button.imagePosition = .imageLeading
-        button.title = " \(lang.badge)" // e.g. " EN" / " עב"
+        button.title = "" // the brand image carries everything
+        button.imagePosition = .imageOnly
+        button.image = tapRunning
+            ? MenuBarIcon.image(language: inputSources.currentLanguage(), style: Settings.shared.iconStyle)
+            : MenuBarIcon.warning()
     }
 
     @objc private func inputSourceChanged() { refreshBadge() }
@@ -136,6 +142,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         menu.addItem(withTitle: "Convert current word", action: #selector(noopHotkeyHint), keyEquivalent: "")
             .toolTip = "Hotkey: Control-Option-H"
+        menu.addItem(withTitle: "Convert clipboard (EN⇄HE)", action: #selector(convertClipboard), keyEquivalent: "")
+            .target = self
 
         menu.addItem(.separator())
         addToggle(to: menu, title: "Auto-detect & convert", isOn: Settings.shared.autoConvert,
@@ -150,11 +158,75 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         menu.addItem(dictionarySubmenuItem())
         menu.addItem(statisticsSubmenuItem())
+        menu.addItem(perAppSubmenuItem())
+        menu.addItem(iconStyleSubmenuItem())
 
         menu.addItem(.separator())
+        let login = NSMenuItem(title: "Launch at login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        login.state = LaunchAtLogin.isEnabled ? .on : .off
+        login.target = self
+        menu.addItem(login)
         menu.addItem(withTitle: "Quit AutoLang", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
         statusItem.menu = menu
+    }
+
+    // MARK: - Icon style picker
+
+    private func iconStyleSubmenuItem() -> NSMenuItem {
+        let item = NSMenuItem(title: "Icon style", action: nil, keyEquivalent: "")
+        let sub = NSMenu()
+        for style in IconStyle.allCases {
+            let si = NSMenuItem(title: style.title, action: #selector(pickIconStyle(_:)), keyEquivalent: "")
+            si.target = self
+            si.representedObject = style.rawValue
+            si.state = (style == Settings.shared.iconStyle) ? .on : .off
+            si.image = MenuBarIcon.image(language: inputSources.currentLanguage(), style: style)
+            sub.addItem(si)
+        }
+        item.submenu = sub
+        return item
+    }
+
+    // MARK: - Per-app rules
+
+    private func perAppSubmenuItem() -> NSMenuItem {
+        let item = NSMenuItem(title: "Per-app rules", action: nil, keyEquivalent: "")
+        let sub = NSMenu()
+
+        if let app = lastActiveApp {
+            let on = !AppRules.shared.isExcluded(app.id)
+            let toggle = NSMenuItem(title: "Convert in \(app.name)", action: #selector(toggleCurrentApp), keyEquivalent: "")
+            toggle.state = on ? .on : .off
+            toggle.target = self
+            sub.addItem(toggle)
+        } else {
+            let hint = NSMenuItem(title: "Switch to an app, then reopen this menu", action: nil, keyEquivalent: "")
+            hint.isEnabled = false
+            sub.addItem(hint)
+        }
+
+        let excluded = AppRules.shared.all()
+        if !excluded.isEmpty {
+            sub.addItem(.separator())
+            let head = NSMenuItem(title: "Disabled in (click to re-enable):", action: nil, keyEquivalent: "")
+            head.isEnabled = false
+            sub.addItem(head)
+            for id in excluded {
+                let ei = NSMenuItem(title: "✓  \(shortName(id))", action: #selector(reEnableApp(_:)), keyEquivalent: "")
+                ei.target = self
+                ei.representedObject = id
+                ei.toolTip = id
+                sub.addItem(ei)
+            }
+        }
+        item.submenu = sub
+        return item
+    }
+
+    /// Last dotted component of a bundle id, for a friendlier label.
+    private func shortName(_ bundleID: String) -> String {
+        bundleID.split(separator: ".").last.map(String.init) ?? bundleID
     }
 
     // MARK: - Learned words submenu (browse + delete per word)
@@ -245,6 +317,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func resetStats() { Stats.shared.reset(); buildMenu() }
+
+    @objc private func convertClipboard() {
+        _ = ClipboardConverter.convertPasteboard()
+    }
+
+    @objc private func pickIconStyle(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let style = IconStyle(rawValue: raw) else { return }
+        Settings.shared.iconStyle = style
+        refreshBadge()
+        buildMenu()
+    }
+
+    @objc private func toggleCurrentApp() {
+        guard let app = lastActiveApp else { return }
+        let nowExcluded = !AppRules.shared.isExcluded(app.id)
+        AppRules.shared.setExcluded(app.id, nowExcluded)
+        buildMenu()
+    }
+
+    @objc private func reEnableApp(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        AppRules.shared.setExcluded(id, false)
+        buildMenu()
+    }
+
+    @objc private func toggleLaunchAtLogin() {
+        LaunchAtLogin.set(!LaunchAtLogin.isEnabled)
+        buildMenu()
+    }
 
     @objc private func openDetailedStats() {
         let html = StatsReport.html(from: Stats.shared.data, top: Stats.shared.topWords(limit: 15))
