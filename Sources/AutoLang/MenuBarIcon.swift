@@ -72,21 +72,23 @@ enum MenuBarIcon {
         make(width: 21) { r in
             let c = NSPoint(x: r.midX, y: r.midY - 0.5)
             let radius: CGFloat = 7.3
-            let endAngle: CGFloat = 70            // arc runs CCW from here...
-            let startAngle: CGFloat = 120         // ...all the way around to here (gap at top)
+            // Sweep the long way (~310°) counter-clockwise, leaving a gap at the
+            // top where the arrowhead sits.
+            let startAngle: CGFloat = 120
+            let endAngle: CGFloat = 70
 
             let arc = NSBezierPath()
-            arc.appendArc(withCenter: c, radius: radius, startAngle: startAngle, endAngle: endAngle, clockwise: true)
+            arc.appendArc(withCenter: c, radius: radius, startAngle: startAngle, endAngle: endAngle, clockwise: false)
             arc.lineWidth = 1.5
             arc.lineCapStyle = .round
             NSColor.black.setStroke()
             arc.stroke()
 
-            // Arrowhead at the arc's end, pointing along the (clockwise) tangent.
+            // Arrowhead at the arc's end, pointing along the CCW tangent.
             let a = Double(endAngle) * .pi / 180
             let ca = CGFloat(cos(a)), sa = CGFloat(sin(a))
             let tip = NSPoint(x: c.x + radius * ca, y: c.y + radius * sa)
-            let tan = NSPoint(x: sa, y: -ca)   // clockwise tangent
+            let tan = NSPoint(x: -sa, y: ca)   // counter-clockwise tangent
             let nrm = NSPoint(x: ca, y: sa)    // radial
             let head = NSBezierPath()
             head.move(to: NSPoint(x: tip.x + tan.x * 3.0, y: tip.y + tan.y * 3.0))
