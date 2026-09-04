@@ -7,7 +7,8 @@ import AppKit
 enum IconStyle: String, CaseIterable {
     case duo      // A · א monogram, active side emphasized
     case pill     // active letter inside a rounded badge
-    case swap     // active letter wrapped by a circular (convert) arrow
+    case swap     // active letter wrapped by a single circular (convert) arrow
+    case cycle    // active letter inside a two-arrow cycle (gaps left & right)
     case classic  // speech bubble + EN/עב text (original)
 
     var title: String {
@@ -15,6 +16,7 @@ enum IconStyle: String, CaseIterable {
         case .duo:     return "Duo monogram  (A·א)"
         case .pill:    return "Pill badge"
         case .swap:    return "Swap arrow  (⟳)"
+        case .cycle:   return "Cycle arrows  (↻)"
         case .classic: return "Classic bubble"
         }
     }
@@ -28,6 +30,7 @@ enum MenuBarIcon {
         case .duo:     return duo(language)
         case .pill:    return framed(language)
         case .swap:    return swapArrow(language)
+        case .cycle:   return cycle(language)
         case .classic: return classic(language)
         }
     }
@@ -100,6 +103,43 @@ enum MenuBarIcon {
 
             text(lang == .hebrew ? "א" : "A", at: c, size: 9.5, weight: .bold, alpha: 1)
         }
+    }
+
+    /// Two counter-clockwise arrows forming a circle with gaps on the left and
+    /// right, the active letter centered — the classic "cycle/refresh" mark.
+    private static func cycle(_ lang: Language) -> NSImage {
+        make(width: 21) { r in
+            let c = NSPoint(x: r.midX, y: r.midY - 0.5)
+            let radius: CGFloat = 7.3
+            NSColor.black.setStroke()
+            NSColor.black.setFill()
+            // Top arc (arrowhead upper-left) and bottom arc (arrowhead lower-right),
+            // gaps at 0° (right) and 180° (left).
+            for (start, end) in [(CGFloat(20), CGFloat(158)), (CGFloat(200), CGFloat(338))] {
+                let arc = NSBezierPath()
+                arc.appendArc(withCenter: c, radius: radius, startAngle: start, endAngle: end, clockwise: false)
+                arc.lineWidth = 1.5
+                arc.lineCapStyle = .round
+                arc.stroke()
+                ccwArrowhead(center: c, radius: radius, endAngle: end).fill()
+            }
+            text(lang == .hebrew ? "א" : "A", at: c, size: 9, weight: .bold, alpha: 1)
+        }
+    }
+
+    /// Filled triangle at the CCW end of an arc, pointing along the tangent.
+    private static func ccwArrowhead(center c: NSPoint, radius: CGFloat, endAngle: CGFloat) -> NSBezierPath {
+        let a = Double(endAngle) * .pi / 180
+        let ca = CGFloat(cos(a)), sa = CGFloat(sin(a))
+        let tip = NSPoint(x: c.x + radius * ca, y: c.y + radius * sa)
+        let tan = NSPoint(x: -sa, y: ca)   // counter-clockwise tangent
+        let nrm = NSPoint(x: ca, y: sa)    // radial
+        let head = NSBezierPath()
+        head.move(to: NSPoint(x: tip.x + tan.x * 2.6, y: tip.y + tan.y * 2.6))
+        head.line(to: NSPoint(x: tip.x - tan.x * 1.3 + nrm.x * 2.1, y: tip.y - tan.y * 1.3 + nrm.y * 2.1))
+        head.line(to: NSPoint(x: tip.x - tan.x * 1.3 - nrm.x * 2.1, y: tip.y - tan.y * 1.3 - nrm.y * 2.1))
+        head.close()
+        return head
     }
 
     private static func classic(_ lang: Language) -> NSImage {
