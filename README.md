@@ -86,11 +86,25 @@ Verify the core mapping without any GUI or permissions:
 - **Phase 3 — polish:** ✅ version in menu (`AppInfo.swift`), ✅ browsable **learned-words** submenu (per-word delete), ✅ **statistics** (inline menu + HTML **dashboard**, `StatsReport.swift`), ✅ **user-editable per-app rules** (`AppRules.swift` + last-active-app tracking), ✅ **clipboard convert** (`ClipboardConverter.swift`, EN⇄HE on pasted text), ✅ **start-on-boot** via `SMAppService` (`LaunchAtLogin.swift`), ✅ **menu-bar icon styles** — four A·א brand marks, live-switchable (`MenuBarIcon.swift`; preview in `design/icon-preview.html`).
 - **Phase 4 — distribution:** Developer ID signing + notarization (not App Store eligible due to keystroke tap).
 
-## Privacy
+## Permissions & privacy
 
-Keylogger-shaped by necessity, privacy-first by design: the keystroke buffer is
-in-memory only, cleared at every word boundary, never written to disk, and there
-is no network code anywhere in the app.
+AutoLang needs **Accessibility** permission because it reads keystrokes globally
+and posts corrected ones — that's the whole job. It is keylogger-shaped by
+necessity and privacy-first by design:
+
+- The keystroke buffer is **in-memory only**, cleared at every word boundary.
+- **Nothing is written to disk** except your own settings, learned words, and
+  usage counts (all in local `UserDefaults`).
+- **No network code anywhere** — grep the source; there are no URLs, sockets, or
+  analytics. Everything stays on your Mac.
+- It **stays out of password/secure fields** and any apps you exclude.
+
+Because it's open source, you can verify all of the above yourself before
+granting Accessibility.
+
+## License
+
+Licensed under the Apache License 2.0 — see [LICENSE](LICENSE).
 
 ## `phase0/`
 
