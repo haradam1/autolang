@@ -1,112 +1,144 @@
-# AutoLang
+<p align="center">
+  <img src="docs/logo.png" alt="AutoLang" width="260">
+</p>
 
-A macOS menu-bar tool that fixes wrong-layout Hebrew/English typing — you type
-`akuo` meaning `שלום`, and AutoLang re-renders it and flips the active language.
-It's the "Punto Switcher" idea, done natively for Hebrew/English on the Mac.
+<h1 align="center">AutoLang</h1>
 
-**Layout-fixing, not translation.** It re-maps the *keys you pressed* into the
-other layout; it does not translate meaning.
+<p align="center">
+  <strong>Type Hebrew and English interchangeably — AutoLang fixes the wrong-layout mess as you go.</strong>
+</p>
 
-Status: **Phase 1 skeleton** — builds, runs in the menu bar, converts the
-current word on a hotkey, and shows the live language. Auto-detection and typo
-correction are scaffolded (toggles present) but not yet implemented.
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License"></a>
+  <img src="https://img.shields.io/badge/platform-macOS%2013%2B-lightgrey.svg" alt="Platform">
+  <img src="https://img.shields.io/badge/Swift-5-orange.svg" alt="Swift">
+  <img src="https://img.shields.io/badge/version-0.8.0-brightgreen.svg" alt="Version">
+</p>
 
 ---
 
-## Build & run
+You meant to type `שלום` but the keyboard was on English, so you got `akuo`. AutoLang
+notices, rewrites it to `שלום`, and flips your input language — automatically, or on a
+hotkey. It's the classic "Punto Switcher" idea, built natively for Hebrew ⇄ English on
+the Mac.
+
+> **Layout fixing, not translation.** It re-maps the *keys you pressed* into the other
+> layout. It never changes what you meant — only which alphabet it lands in.
+
+## Features
+
+- **Auto-detect & convert** — as you type, wrong-layout gibberish is rewritten to the
+  language it was clearly meant to be. Precision-first: it only converts a word that's
+  gibberish in the active layout *and* a real word in the other.
+- **Phrase-aware** — ambiguous words (valid in both languages) are judged in context,
+  using language *momentum* and a multi-word retroactive fold, not in isolation.
+- **Manual convert** — `⌃⌥H` converts the current word and switches language.
+- **Clipboard convert** — `⌃⌥V` transliterates copied text EN⇄HE (fixes pasted mistakes).
+- **Typo correction** *(optional)* — inserts elided apostrophes (`dont`→`don't`) and fixes
+  safe typos (`helllo`→`hello`, `teh`→`the`) while leaving names like `yaron` untouched.
+- **Learns from you** — undo a conversion and that word is protected forever; browse and
+  edit the list from the menu.
+- **Stays out of the way** — never touches password fields; per-app rules disable it in
+  terminals, editors, and anywhere you choose.
+- **Statistics** — a menu summary plus a self-contained HTML dashboard of your usage.
+- **Brand menu-bar icon** — five styles that also show the live language (A / א),
+  switchable on the fly.
+- **Capitalization preserved**, one-press **undo** on any auto-edit, and **launch at login**.
+
+## Quick start
 
 ```bash
-bash scripts/setup-signing.sh  # ONCE: stable signing identity so grants survive rebuilds
-bash scripts/build.sh          # produces AutoLang.app (compiles + bundles + signs)
-open AutoLang.app              # first run: grant Accessibility, then relaunch
-# or install into /Applications and launch from there:
-bash scripts/install.sh
+bash scripts/setup-signing.sh   # once: a stable local signing identity (see below)
+bash scripts/install.sh         # build + install into /Applications + launch
 ```
 
-### Signing / the re-grant treadmill
+On first launch, grant **Accessibility** when prompted (System Settings ▸ Privacy &
+Security ▸ Accessibility) and relaunch. A brand icon (e.g. `A·א`) appears in the menu bar.
 
-Ad-hoc signing gives the app a new code identity every build, which invalidates
-the macOS Accessibility grant each time. `scripts/setup-signing.sh` creates a
-**stable self-signed identity** (in its own keychain, its own password — not your
-login) so the app's designated requirement stays constant and the grant persists
-across rebuilds. `build.sh` uses it automatically when present, else falls back to
-ad-hoc. Undo it with `scripts/remove-signing.sh`.
+Prefer to run it in place instead of installing?
 
-First launch prompts for **Accessibility** (System Settings ▸ Privacy &
-Security ▸ Accessibility). Grant it and relaunch — TCC permission changes don't
-apply to an already-running process. A `⌘ EN` / `⌘ עב` badge appears in the
-menu bar (a `•` after it means the tap isn't active yet — usually missing
-permission).
+```bash
+bash scripts/build.sh
+open AutoLang.app
+```
 
-Verify the core mapping without any GUI or permissions:
+Verify the core transliteration + detection logic with no GUI or permissions:
 
 ```bash
 ./AutoLang.app/Contents/MacOS/AutoLang --selftest
 ```
 
-> Build note: we compile with `swiftc` directly because this machine's Command
-> Line Tools ship a broken SwiftPM manifest library (`swift build` fails to link
-> the manifest). `Package.swift` is kept for when full Xcode is available.
+> **Build note.** This machine's Command Line Tools ship a broken SwiftPM manifest, so
+> the build compiles with `swiftc` directly and hand-assembles the `.app`. `Package.swift`
+> is kept for when full Xcode is available.
 
-## Use (Phase 1)
+## Usage
 
-- Type a word in the wrong layout, then **⌃⌥H** to convert the current word and
-  switch the active input source.
-- **⌃⌥V** transliterates the **clipboard** EN⇄HE (fixes text pasted in the wrong layout).
-- Auto-detect (when on) converts as you type; a brief menu-bar **flash** confirms
-  each conversion (toggle: "Flash on convert").
+| Action | How |
+|---|---|
+| Convert the word you just typed | **⌃⌥H** (before the space) |
+| Convert the clipboard EN⇄HE | **⌃⌥V** |
+| Undo the last auto-conversion | **Backspace**, immediately after |
+| Turn features on/off | the menu-bar icon |
+
+Turn on **Auto-detect & convert** in the menu to get automatic conversion as you type;
+a brief icon flash confirms each one.
+
+## Menu-bar icon styles
+
+The mark pairs **A** (Latin) with **א** (Hebrew aleph) and always shows the active
+language. Pick from **Icon style** in the menu:
+
+| Style | Look |
+|---|---|
+| **Duo monogram** | `A · א`, active script bold, the other faded |
+| **Pill / Swap arrow / Cycle arrows** | active letter in a badge, a circular arrow, or a two-arrow cycle |
+| **Classic bubble** | speech bubble + `EN` / `עב` |
 
 ## How it works
 
 | Piece | File | Role |
 |---|---|---|
-| Key ↔ letter table | `KeyMap.swift` | keycode → English/Hebrew char (standard layouts) |
-| Global listener | `EventTapController.swift` | `CGEventTap`; buffers the word, catches the hotkey, self-heals on tap-disable |
-| Word buffer | `WordBuffer.swift` | in-progress word (grows into the multi-word window in Phase 2) |
+| Key ↔ letter map | `KeyMap.swift` | keycode → English/Hebrew char (standard US/Israeli layouts) |
+| Global listener | `EventTapController.swift` | `CGEventTap`; buffers words, catches hotkeys, self-heals |
+| Detection oracle | `SpellChecker.swift` | `NSSpellChecker` EN/HE + Hebrew orthography + safe typo rules |
+| Decision engine | `Engine.swift` | momentum, multi-word fold, typo fix, undo |
 | Layout read/switch | `InputSourceManager.swift` | TIS: current language + switch |
-| Text replacement | `TextInjector.swift` | backspaces + unicode injection (needs Accessibility); tags its own events |
-| Word validity | `SpellChecker.swift` | `NSSpellChecker` EN/HE + Hebrew final-letter orthography guard |
-| Skip zones | `AppGuard.swift` | secure fields + excluded apps (terminals, editors, password mgrs) |
-| Personal dict | `UserDictionary.swift` | protected words (never touched); auto-learns from your undos |
-| Orchestration | `Engine.swift` | manual + auto convert, momentum, multi-word run, typo fix, undo/revert |
-| Menu bar / onboarding | `AppDelegate.swift` | status item, badge, toggles, permission flow |
-| Toggles | `Settings.swift` | auto-convert / typo EN / typo HE / pause (persisted) |
-
-## Roadmap
-
-- **Phase 1:** hotkey convert, layout switch, menu-bar language badge, permission onboarding, never-buffer command chords. ✅
-- **Phase 2 — auto-detect:** ✅ `NSSpellChecker`-backed validity (English + Hebrew, with a Hebrew final-letter orthography guard), precision-first conversion on space, **language momentum** (multi-word context), **undo-on-backspace**, synthetic-event tagging, and **never-touch zones** (secure fields + excluded apps in `AppGuard.swift`). Cold-load race warmed up at init.
-- **Phase 2-tail — deferred/retroactive:** ✅ a truly ambiguous word (valid both ways, no run yet) is **held**; when the next word disambiguates the run, the held word is converted **retroactively** (one-word lookback = the "analyze 2 words" behavior). Backspace/Return/app-switch drop the lookback so we never rewrite the wrong span.
-  - Deferred still: a real **bigram frequency** table. Momentum + retroactive lookback already deliver the practical multi-word context; a bigram table would only refine same-language edge cases and needs an offline dataset. Left as a future refinement.
-- **Phase 2.5 — typo correction:** ✅ per-language toggles. English inserts elided apostrophes from a **curated contraction list** (`dont`→`don't`, ambiguous bares like `were`/`its` left alone) and applies **safe-only** spelling fixes — repeated-letter collapse (`helllo`→`hello`) and adjacent transposition (`teh`→`the`, `recieve`→`receive`) — so names like `yaron` are never mangled. Hebrew guarded by orthography, off by default. Case preserved, undoable.
-- **Quality pass (v0.4.0):**
-  - **Capitalization preserved** — the buffer tracks shift/caps per key, so `Shalom`→Hebrew and typo fixes keep your casing (`Helllo`→`Hello`).
-  - **Multi-word run** — ambiguous leading words are held as a *run* (up to 8), and the whole phrase flips once a later word disambiguates; digits/punctuation/double-space/backspace reset the run so spans stay valid.
-  - **Personal dictionary** (`UserDictionary.swift`) — undo a conversion and that word is protected forever (never auto-changed); managed from the menu.
-- **Phase 3 — polish:** ✅ version in menu (`AppInfo.swift`), ✅ browsable **learned-words** submenu (per-word delete), ✅ **statistics** (inline menu + HTML **dashboard**, `StatsReport.swift`), ✅ **user-editable per-app rules** (`AppRules.swift` + last-active-app tracking), ✅ **clipboard convert** (`ClipboardConverter.swift`, EN⇄HE on pasted text), ✅ **start-on-boot** via `SMAppService` (`LaunchAtLogin.swift`), ✅ **menu-bar icon styles** — four A·א brand marks, live-switchable (`MenuBarIcon.swift`; preview in `design/icon-preview.html`).
-- **Phase 4 — distribution:** Developer ID signing + notarization (not App Store eligible due to keystroke tap).
+| Text replacement | `TextInjector.swift` | backspaces + unicode injection (tags its own events) |
+| Skip zones / rules | `AppGuard.swift`, `AppRules.swift` | secure fields + per-app exclusions |
+| Personal dictionary | `UserDictionary.swift` | protected words, learned from undos |
+| Menu bar & icons | `AppDelegate.swift`, `MenuBarIcon.swift` | status item, menus, brand marks |
 
 ## Permissions & privacy
 
-AutoLang needs **Accessibility** permission because it reads keystrokes globally
-and posts corrected ones — that's the whole job. It is keylogger-shaped by
-necessity and privacy-first by design:
+AutoLang needs **Accessibility** because it reads keystrokes globally and posts corrected
+ones — that's the whole job. It is keylogger-shaped by necessity and privacy-first by
+design:
 
 - The keystroke buffer is **in-memory only**, cleared at every word boundary.
-- **Nothing is written to disk** except your own settings, learned words, and
-  usage counts (all in local `UserDefaults`).
-- **No network code anywhere** — grep the source; there are no URLs, sockets, or
-  analytics. Everything stays on your Mac.
+- **Nothing is written to disk** except your own settings, learned words, and usage counts
+  (local `UserDefaults`).
+- **No network code anywhere** — no URLs, sockets, or analytics. Everything stays on your Mac.
 - It **stays out of password/secure fields** and any apps you exclude.
 
-Because it's open source, you can verify all of the above yourself before
-granting Accessibility.
+Because it's open source, you can verify all of this before granting Accessibility.
+
+### A note on signing
+
+Ad-hoc signing gives the app a new identity every build, which invalidates the macOS
+Accessibility grant each time. `scripts/setup-signing.sh` creates a **stable self-signed
+identity** (in its own keychain, its own password — not your login) so the grant persists
+across rebuilds. Undo it with `scripts/remove-signing.sh`. For sharing a binary with
+others, notarization with an Apple Developer ID is the friction-free path.
+
+## Roadmap
+
+Done through **v0.8.0**: auto-detect, phrase context, typo correction, personal dictionary,
+per-app rules, clipboard convert, statistics, launch-at-login, brand icons.
+
+Ideas not yet built: a preferences window, configurable hotkeys, a third language, a real
+bigram model, and Developer-ID notarization for frictionless distribution.
 
 ## License
 
 Licensed under the Apache License 2.0 — see [LICENSE](LICENSE).
-
-## `phase0/`
-
-A throwaway Hammerspoon spike (`autolang.lua`) that validated the mapping + hotkey
-feel before the Swift build. Requires Hammerspoon (not installed here).
