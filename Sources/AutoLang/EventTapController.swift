@@ -34,6 +34,13 @@ final class EventTapController {
     /// Called on the clipboard-convert hotkey (Control+Option+V).
     var onClipboardConvert: (() -> Void)?
 
+    /// Called when the caret is moved by arrows/Home/End or a mouse click, so we
+    /// can match the input language to the word the caret lands in.
+    var onCaretMove: (() -> Void)?
+
+    /// Keys that move the caret without editing: arrows, Home, End, Page Up/Down.
+    private static let navKeycodes: Set<Int64> = [0x7B, 0x7C, 0x7D, 0x7E, 0x73, 0x77, 0x74, 0x79]
+
     /// Set by the engine right after an auto-conversion; the very next keystroke
     /// either triggers an undo (if it's backspace) or clears this.
     private var undoArmed = false
@@ -47,7 +54,8 @@ final class EventTapController {
 
         let mask: CGEventMask =
             (1 << CGEventType.keyDown.rawValue) |
-            (1 << CGEventType.flagsChanged.rawValue)
+            (1 << CGEventType.flagsChanged.rawValue) |
+            (1 << CGEventType.leftMouseDown.rawValue)
 
         let refcon = Unmanaged.passUnretained(self).toOpaque()
 
@@ -92,6 +100,16 @@ final class EventTapController {
             return Unmanaged.passUnretained(event)
         }
 
+        // A mouse click repositions the caret — match the language to the word
+        // it lands in, and drop the retro run.
+        if type == .leftMouseDown {
+            DispatchQueue.main.async { [weak self] in
+                self?.onCaretMove?()
+                self?.onContextReset?()
+            }
+            return Unmanaged.passUnretained(event)
+        }
+
         guard type == .keyDown else {
             return Unmanaged.passUnretained(event)
         }
@@ -126,6 +144,12 @@ final class EventTapController {
            !flags.contains(.maskCommand) {
             DispatchQueue.main.async { [weak self] in self?.onClipboardConvert?() }
             return nil
+        }
+
+        // Caret-navigation keys: match the input language to the word we land in.
+        // (Don't return — fall through so the retro run is reset and the buffer flushes.)
+        if Self.navKeycodes.contains(keycode) {
+            DispatchQueue.main.async { [weak self] in self?.onCaretMove?() }
         }
 
         // Any command-key chord is a shortcut, not text — don't buffer it.

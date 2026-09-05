@@ -4,6 +4,6 @@ import Foundation
 /// Resources/Info.plist (CFBundleShortVersionString).
 enum AppInfo {
     static let name = "AutoLang"
-    static let version = "0.5.0"
+    static let version = "0.9.0"
     static var titled: String { "\(name) \(version)" }
 }

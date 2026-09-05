@@ -12,7 +12,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License"></a>
   <img src="https://img.shields.io/badge/platform-macOS%2013%2B-lightgrey.svg" alt="Platform">
   <img src="https://img.shields.io/badge/Swift-5-orange.svg" alt="Swift">
-  <img src="https://img.shields.io/badge/version-0.8.0-brightgreen.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.9.0-brightgreen.svg" alt="Version">
 </p>
 
 ---
@@ -36,6 +36,8 @@ the Mac.
 - **Clipboard convert** — `⌃⌥V` transliterates copied text EN⇄HE (fixes pasted mistakes).
 - **Typo correction** *(optional)* — inserts elided apostrophes (`dont`→`don't`) and fixes
   safe typos (`helllo`→`hello`, `teh`→`the`) while leaving names like `yaron` untouched.
+- **Cursor-aware language** — arrow or click back into a word and the input language
+  switches to match it (via Accessibility), so you never insert English into a Hebrew word.
 - **Learns from you** — undo a conversion and that word is protected forever; browse and
   edit the list from the menu.
 - **Stays out of the way** — never touches password fields; per-app rules disable it in

@@ -48,4 +48,11 @@ final class Settings {
         get { defaults.object(forKey: "flashOnConvert") == nil ? true : defaults.bool(forKey: "flashOnConvert") }
         set { defaults.set(newValue, forKey: "flashOnConvert") }
     }
+
+    /// When the caret moves into a word (arrows/click), switch the input language
+    /// to match that word. On by default.
+    var matchLanguageOnCursor: Bool {
+        get { defaults.object(forKey: "matchLanguageOnCursor") == nil ? true : defaults.bool(forKey: "matchLanguageOnCursor") }
+        set { defaults.set(newValue, forKey: "matchLanguageOnCursor") }
+    }
 }

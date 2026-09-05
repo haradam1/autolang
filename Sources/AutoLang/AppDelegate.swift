@@ -16,6 +16,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var tapRunning = false
     private var permissionTimer: Timer?
     private var flashTimer: Timer?
+    private var caretTimer: Timer?
+    private let appGuard = AppGuard()
 
     /// The last non-AutoLang app you were in, so the per-app menu can target it.
     private var lastActiveApp: (name: String, id: String)?
@@ -115,6 +117,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         tapController.onClipboardConvert = { [weak self] in
             if ClipboardConverter.convertPasteboard() { self?.flash() }
         }
+        tapController.onCaretMove = { [weak self] in
+            self?.scheduleCaretLanguageMatch()
+        }
+    }
+
+    /// Debounced: after the caret settles, switch the input language to match the
+    /// word it's in, so editing a Hebrew word doesn't insert English (and vice versa).
+    private func scheduleCaretLanguageMatch() {
+        guard Settings.shared.matchLanguageOnCursor, !Settings.shared.paused,
+              !appGuard.autoConvertBlocked() else { return }
+        caretTimer?.invalidate()
+        caretTimer = Timer.scheduledTimer(withTimeInterval: 0.06, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            guard let lang = CaretLanguage.atCaret() else { return }
+            if self.inputSources.currentLanguage() != lang {
+                self.inputSources.select(lang)
+                self.refreshBadge()
+            }
+        }
     }
 
     /// Briefly tint the menu-bar icon to acknowledge a conversion.
@@ -170,6 +191,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                   action: #selector(toggleTypoEN))
         addToggle(to: menu, title: "Fix typos (Hebrew)", isOn: Settings.shared.typoCorrectHE,
                   action: #selector(toggleTypoHE))
+        addToggle(to: menu, title: "Match language to cursor", isOn: Settings.shared.matchLanguageOnCursor,
+                  action: #selector(toggleMatchCursor))
         addToggle(to: menu, title: "Flash on convert", isOn: Settings.shared.flashOnConvert,
                   action: #selector(toggleFlash))
         addToggle(to: menu, title: "Pause", isOn: Settings.shared.paused,
@@ -386,4 +409,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func toggleTypoHE() { Settings.shared.typoCorrectHE.toggle(); buildMenu() }
     @objc private func togglePause() { Settings.shared.paused.toggle(); buildMenu() }
     @objc private func toggleFlash() { Settings.shared.flashOnConvert.toggle(); buildMenu() }
+    @objc private func toggleMatchCursor() { Settings.shared.matchLanguageOnCursor.toggle(); buildMenu() }
 }

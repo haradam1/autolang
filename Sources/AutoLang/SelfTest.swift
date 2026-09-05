@@ -60,6 +60,17 @@ enum SelfTest {
         check("plan run original covers all", run.original, "vhs gk akuo ")
         check("plan run corrected covers all", run.corrected, "הם על שלום ")
 
+        // Caret language: language of the word under the cursor (issue: mixed words).
+        func caretLang(_ t: String, _ c: Int) -> String {
+            switch CaretLanguage.wordLanguage(in: t, caret: c) {
+            case .some(.hebrew): return "he"; case .some(.english): return "en"; case .none: return "nil"
+            }
+        }
+        check("caret inside Hebrew word", caretLang("שלום world", 2), "he")
+        check("caret inside English word", caretLang("שלום world", 7), "en")
+        check("caret at end of Hebrew word", caretLang("שלום world", 4), "he")
+        check("caret at start of English word", caretLang("שלום world", 5), "en")
+
         print(failed ? "SELFTEST: FAIL" : "SELFTEST: PASS")
     }
 
