@@ -60,6 +60,32 @@ final class Engine {
     /// wrong span.
     func resetContext() { pending.removeAll() }
 
+    /// The first keystroke after the caret moved into existing text. Reads the
+    /// word under the caret (via Accessibility) and, if the active layout doesn't
+    /// match that word's language, switches and injects this character in the
+    /// right language — so editing a Hebrew word never inserts English (and vice
+    /// versa). Returns true if it handled (and thus swallowed) the keystroke.
+    ///
+    /// Reading the caret HERE — at the moment you type, not when you navigated —
+    /// avoids the cross-process race where the caret hasn't settled yet.
+    func correctFirstEditKeystroke(keycode: Int64, shifted: Bool) -> Bool {
+        guard Settings.shared.matchLanguageOnCursor, !Settings.shared.paused else { return false }
+        guard !appGuard.autoConvertBlocked() else { return false }
+        guard let wordLang = CaretLanguage.atCaret() else { return false }
+
+        let current = inputSources.currentLanguage()
+        guard wordLang != current else { return false } // layout already matches
+
+        let corrected = KeyMap.render([Keystroke(code: keycode, shifted: shifted)], as: wordLang)
+        guard !corrected.isEmpty else { return false }  // key not mappable in target
+
+        injector.replace(deleting: 0, with: corrected)   // original was swallowed
+        inputSources.select(wordLang)
+        pending.removeAll()
+        momentum = wordLang
+        return true
+    }
+
     // MARK: - Word boundary
 
     func processWord(_ keystrokes: [Keystroke], boundary: Int64) -> Bool {

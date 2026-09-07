@@ -58,10 +58,14 @@ enum CaretLanguage {
     /// entire document; falls back to the full value if that's unsupported.
     private static func caretWindow() -> (String, Int)? {
         let system = AXUIElementCreateSystemWide()
+        // Cap AX round-trips so an unresponsive app can't stall the event tap
+        // (this runs synchronously in the tap callback).
+        AXUIElementSetMessagingTimeout(system, 0.2)
         var focusedRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
               let focused = focusedRef else { return nil }
         let element = focused as! AXUIElement
+        AXUIElementSetMessagingTimeout(element, 0.2)
 
         var rangeRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeRef) == .success,

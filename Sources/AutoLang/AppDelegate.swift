@@ -16,8 +16,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var tapRunning = false
     private var permissionTimer: Timer?
     private var flashTimer: Timer?
-    private var caretTimer: Timer?
-    private let appGuard = AppGuard()
 
     /// The last non-AutoLang app you were in, so the per-app menu can target it.
     private var lastActiveApp: (name: String, id: String)?
@@ -117,24 +115,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         tapController.onClipboardConvert = { [weak self] in
             if ClipboardConverter.convertPasteboard() { self?.flash() }
         }
-        tapController.onCaretMove = { [weak self] in
-            self?.scheduleCaretLanguageMatch()
-        }
-    }
-
-    /// Debounced: after the caret settles, switch the input language to match the
-    /// word it's in, so editing a Hebrew word doesn't insert English (and vice versa).
-    private func scheduleCaretLanguageMatch() {
-        guard Settings.shared.matchLanguageOnCursor, !Settings.shared.paused,
-              !appGuard.autoConvertBlocked() else { return }
-        caretTimer?.invalidate()
-        caretTimer = Timer.scheduledTimer(withTimeInterval: 0.06, repeats: false) { [weak self] _ in
-            guard let self else { return }
-            guard let lang = CaretLanguage.atCaret() else { return }
-            if self.inputSources.currentLanguage() != lang {
-                self.inputSources.select(lang)
-                self.refreshBadge()
-            }
+        tapController.firstEditKeystroke = { [weak self] keycode, shifted in
+            guard let self else { return false }
+            let handled = self.engine.correctFirstEditKeystroke(keycode: keycode, shifted: shifted)
+            if handled { self.refreshBadge() } // language switched
+            return handled
         }
     }
 

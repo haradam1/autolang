@@ -34,9 +34,14 @@ final class EventTapController {
     /// Called on the clipboard-convert hotkey (Control+Option+V).
     var onClipboardConvert: (() -> Void)?
 
-    /// Called when the caret is moved by arrows/Home/End or a mouse click, so we
-    /// can match the input language to the word the caret lands in.
-    var onCaretMove: (() -> Void)?
+    /// Synchronous: called with the FIRST typed key after the caret moves. If it
+    /// language-corrects the keystroke (switches layout + injects the char in the
+    /// word's language), it returns true and we swallow the original key.
+    var firstEditKeystroke: ((_ keycode: Int64, _ shifted: Bool) -> Bool)?
+
+    /// Set when the caret moves (arrows/Home/End/PageUp-Down/click); the next
+    /// typed key is the one we language-match.
+    private var caretMoved = false
 
     /// Keys that move the caret without editing: arrows, Home, End, Page Up/Down.
     private static let navKeycodes: Set<Int64> = [0x7B, 0x7C, 0x7D, 0x7E, 0x73, 0x77, 0x74, 0x79]
@@ -100,13 +105,11 @@ final class EventTapController {
             return Unmanaged.passUnretained(event)
         }
 
-        // A mouse click repositions the caret — match the language to the word
-        // it lands in, and drop the retro run.
+        // A mouse click repositions the caret. Mark it so the next typed key is
+        // language-matched to the word clicked into, and drop the retro run.
         if type == .leftMouseDown {
-            DispatchQueue.main.async { [weak self] in
-                self?.onCaretMove?()
-                self?.onContextReset?()
-            }
+            caretMoved = true
+            DispatchQueue.main.async { [weak self] in self?.onContextReset?() }
             return Unmanaged.passUnretained(event)
         }
 
@@ -146,10 +149,23 @@ final class EventTapController {
             return nil
         }
 
-        // Caret-navigation keys: match the input language to the word we land in.
-        // (Don't return — fall through so the retro run is reset and the buffer flushes.)
+        // Caret-navigation keys: mark that the caret moved (the next typed key
+        // gets language-matched). Fall through so the retro run resets & buffer flushes.
         if Self.navKeycodes.contains(keycode) {
-            DispatchQueue.main.async { [weak self] in self?.onCaretMove?() }
+            caretMoved = true
+        } else if caretMoved {
+            // First key after moving the caret: match the input language to the
+            // word being edited, synchronously, before the character lands.
+            caretMoved = false
+            if KeyMap.isMappable(keycode), !flags.contains(.maskCommand),
+               let handler = firstEditKeystroke {
+                let shifted = flags.contains(.maskShift) != flags.contains(.maskAlphaShift)
+                if handler(keycode, shifted) {
+                    buffer.clear()
+                    buffer.append(Keystroke(code: keycode, shifted: shifted))
+                    return nil // swallowed; the engine injected the corrected char
+                }
+            }
         }
 
         // Any command-key chord is a shortcut, not text — don't buffer it.

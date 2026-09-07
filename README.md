@@ -12,7 +12,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License"></a>
   <img src="https://img.shields.io/badge/platform-macOS%2013%2B-lightgrey.svg" alt="Platform">
   <img src="https://img.shields.io/badge/Swift-5-orange.svg" alt="Swift">
-  <img src="https://img.shields.io/badge/version-0.9.0-brightgreen.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.9.1-brightgreen.svg" alt="Version">
 </p>
 
 ---
@@ -135,8 +135,9 @@ others, notarization with an Apple Developer ID is the friction-free path.
 
 ## Roadmap
 
-Done through **v0.8.0**: auto-detect, phrase context, typo correction, personal dictionary,
-per-app rules, clipboard convert, statistics, launch-at-login, brand icons.
+Done through **v0.9.1**: auto-detect, phrase context, typo correction, personal dictionary,
+per-app rules, clipboard convert, statistics, launch-at-login, brand icons, and
+cursor-aware language matching (switch layout to the word you edit).
 
 Ideas not yet built: a preferences window, configurable hotkeys, a third language, a real
 bigram model, and Developer-ID notarization for frictionless distribution.
