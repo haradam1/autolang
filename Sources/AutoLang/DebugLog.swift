@@ -52,6 +52,12 @@ final class DebugLog {
     }
 
     private func append(_ line: String) {
+        // If the file was removed/rotated out from under us, drop the stale
+        // handle so we recreate it — otherwise a days-long session could stop
+        // writing silently.
+        if handle != nil, !FileManager.default.fileExists(atPath: fileURL.path) {
+            handle?.closeFile(); handle = nil
+        }
         if handle == nil {
             if !FileManager.default.fileExists(atPath: fileURL.path) {
                 FileManager.default.createFile(atPath: fileURL.path, contents: nil)
