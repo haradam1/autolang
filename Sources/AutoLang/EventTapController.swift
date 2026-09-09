@@ -109,6 +109,7 @@ final class EventTapController {
         // language-matched to the word clicked into, and drop the retro run.
         if type == .leftMouseDown {
             caretMoved = true
+            DebugLog.shared.log("CLICK (caret moved)")
             DispatchQueue.main.async { [weak self] in self?.onContextReset?() }
             return Unmanaged.passUnretained(event)
         }
@@ -120,12 +121,20 @@ final class EventTapController {
         let keycode = event.getIntegerValueField(.keyboardEventKeycode)
         let flags = event.flags
 
+        DebugLog.shared.log("KEY \(Self.keyLabel(keycode))"
+            + " shift=\(flags.contains(.maskShift) ? 1 : 0)"
+            + " caps=\(flags.contains(.maskAlphaShift) ? 1 : 0)"
+            + " cmd=\(flags.contains(.maskCommand) ? 1 : 0)"
+            + " ctrl=\(flags.contains(.maskControl) ? 1 : 0)"
+            + " opt=\(flags.contains(.maskAlternate) ? 1 : 0)")
+
         // Undo window: the first real keystroke after an auto-convert. If it's
         // backspace, revert instead of deleting; otherwise just disarm.
         if undoArmed {
             undoArmed = false
             if keycode == 0x33, !flags.contains(.maskCommand) {
                 buffer.clear()
+                DebugLog.shared.log("  → UNDO (backspace after auto-convert)")
                 DispatchQueue.main.async { [weak self] in self?.onUndo?() }
                 return nil // swallow the backspace; the engine restores the text
             }
@@ -137,6 +146,7 @@ final class EventTapController {
            flags.contains(.maskControl), flags.contains(.maskAlternate),
            !flags.contains(.maskCommand) {
             let word = buffer.current
+            DebugLog.shared.log("  → HOTKEY ⌃⌥H (manual convert)")
             DispatchQueue.main.async { [weak self] in self?.onManualConvert?(word) }
             return nil
         }
@@ -145,6 +155,7 @@ final class EventTapController {
         if keycode == Self.clipboardKeycode,
            flags.contains(.maskControl), flags.contains(.maskAlternate),
            !flags.contains(.maskCommand) {
+            DebugLog.shared.log("  → HOTKEY ⌃⌥V (clipboard convert)")
             DispatchQueue.main.async { [weak self] in self?.onClipboardConvert?() }
             return nil
         }
@@ -153,6 +164,7 @@ final class EventTapController {
         // gets language-matched). Fall through so the retro run resets & buffer flushes.
         if Self.navKeycodes.contains(keycode) {
             caretMoved = true
+            DebugLog.shared.log("  → NAV (caret moved)")
         } else if caretMoved {
             // First key after moving the caret: match the input language to the
             // word being edited, synchronously, before the character lands.
@@ -160,6 +172,7 @@ final class EventTapController {
             if KeyMap.isMappable(keycode), !flags.contains(.maskCommand),
                let handler = firstEditKeystroke {
                 let shifted = flags.contains(.maskShift) != flags.contains(.maskAlphaShift)
+                DebugLog.shared.log("  → FIRST-EDIT after caret move")
                 if handler(keycode, shifted) {
                     buffer.clear()
                     buffer.append(Keystroke(code: keycode, shifted: shifted))
@@ -200,6 +213,22 @@ final class EventTapController {
         let shifted = flags.contains(.maskShift) != flags.contains(.maskAlphaShift)
         buffer.append(Keystroke(code: keycode, shifted: shifted))
         return Unmanaged.passUnretained(event)
+    }
+}
+
+extension EventTapController {
+    /// Human-readable label for a keycode, for the debug log.
+    fileprivate static func keyLabel(_ code: Int64) -> String {
+        if let e = KeyMap.entry(for: code) { return "'\(e.en)'" }
+        switch code {
+        case 0x31: return "SPACE"
+        case 0x24: return "RETURN"
+        case 0x30: return "TAB"
+        case 0x33: return "BACKSPACE"
+        case 0x7B: return "←"; case 0x7C: return "→"; case 0x7D: return "↓"; case 0x7E: return "↑"
+        case 0x73: return "HOME"; case 0x77: return "END"
+        default: return String(format: "key(0x%02X)", code)
+        }
     }
 }
 

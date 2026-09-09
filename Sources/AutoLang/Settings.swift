@@ -55,4 +55,10 @@ final class Settings {
         get { defaults.object(forKey: "matchLanguageOnCursor") == nil ? true : defaults.bool(forKey: "matchLanguageOnCursor") }
         set { defaults.set(newValue, forKey: "matchLanguageOnCursor") }
     }
+
+    /// Diagnostic logging (records typed text to a local file). Off by default.
+    var debugLogging: Bool {
+        get { defaults.bool(forKey: "debugLogging") }
+        set { defaults.set(newValue, forKey: "debugLogging") }
+    }
 }

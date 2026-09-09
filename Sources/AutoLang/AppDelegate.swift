@@ -42,6 +42,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self, selector: #selector(appActivated(_:)),
             name: NSWorkspace.didActivateApplicationNotification, object: nil)
 
+        if Settings.shared.debugLogging {
+            DebugLog.shared.begin("AutoLang \(AppInfo.version) — launched")
+        }
         wireEngine()
         startTapIfPermitted()
     }
@@ -113,7 +116,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.engine.resetContext()
         }
         tapController.onClipboardConvert = { [weak self] in
-            if ClipboardConverter.convertPasteboard() { self?.flash() }
+            let changed = ClipboardConverter.convertPasteboard()
+            DebugLog.shared.log("CLIPBOARD convert changed=\(changed)")
+            if changed { self?.flash() }
         }
         tapController.firstEditKeystroke = { [weak self] keycode, shifted in
             guard let self else { return false }
@@ -144,7 +149,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             : MenuBarIcon.warning()
     }
 
-    @objc private func inputSourceChanged() { refreshBadge() }
+    @objc private func inputSourceChanged() {
+        DebugLog.shared.log("ACTIVE=\(inputSources.currentLanguage() == .hebrew ? "HE" : "EN") (observed)")
+        refreshBadge()
+    }
 
     private func buildMenu() {
         let menu = NSMenu()
@@ -190,6 +198,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(iconStyleSubmenuItem())
 
         menu.addItem(.separator())
+        menu.addItem(debugSubmenuItem())
         let login = NSMenuItem(title: "Launch at login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
         login.state = LaunchAtLogin.isEnabled ? .on : .off
         login.target = self
@@ -283,6 +292,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             sub.addItem(.separator())
             sub.addItem(withTitle: "Forget all", action: #selector(forgetLearned), keyEquivalent: "").target = self
         }
+        item.submenu = sub
+        return item
+    }
+
+    // MARK: - Debug submenu
+
+    private func debugSubmenuItem() -> NSMenuItem {
+        let item = NSMenuItem(title: "Debug", action: nil, keyEquivalent: "")
+        let sub = NSMenu()
+
+        let toggle = NSMenuItem(title: "Log everything I type (diagnostic)",
+                                action: #selector(toggleDebugLogging), keyEquivalent: "")
+        toggle.state = Settings.shared.debugLogging ? .on : .off
+        toggle.target = self
+        toggle.toolTip = "Records keystrokes, decisions, and language changes to a local file for debugging."
+        sub.addItem(toggle)
+
+        if Settings.shared.debugLogging {
+            let note = NSMenuItem(title: "Recording to ~/Library/Logs/AutoLang/debug.log", action: nil, keyEquivalent: "")
+            note.isEnabled = false
+            sub.addItem(note)
+        }
+        sub.addItem(.separator())
+        sub.addItem(withTitle: "Open debug log", action: #selector(openDebugLog), keyEquivalent: "").target = self
+        sub.addItem(withTitle: "Reveal log in Finder", action: #selector(revealDebugLog), keyEquivalent: "").target = self
+        sub.addItem(withTitle: "Clear debug log", action: #selector(clearDebugLog), keyEquivalent: "").target = self
+
         item.submenu = sub
         return item
     }
@@ -395,4 +431,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func togglePause() { Settings.shared.paused.toggle(); buildMenu() }
     @objc private func toggleFlash() { Settings.shared.flashOnConvert.toggle(); buildMenu() }
     @objc private func toggleMatchCursor() { Settings.shared.matchLanguageOnCursor.toggle(); buildMenu() }
+
+    @objc private func toggleDebugLogging() {
+        Settings.shared.debugLogging.toggle()
+        if Settings.shared.debugLogging {
+            DebugLog.shared.begin("AutoLang \(AppInfo.version) — debug session start")
+        }
+        buildMenu()
+    }
+    @objc private func openDebugLog() { NSWorkspace.shared.open(DebugLog.shared.fileURL) }
+    @objc private func revealDebugLog() { NSWorkspace.shared.activateFileViewerSelecting([DebugLog.shared.fileURL]) }
+    @objc private func clearDebugLog() { DebugLog.shared.clear() }
 }
