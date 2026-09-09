@@ -212,6 +212,13 @@ final class EventTapController {
         }
         let shifted = flags.contains(.maskShift) != flags.contains(.maskAlphaShift)
         buffer.append(Keystroke(code: keycode, shifted: shifted))
+
+        // Debug anchor: typing the physical keys for "autolang" drops a banner so
+        // we can find the moment right before it (works in either layout, no space needed).
+        if DebugLog.shared.enabled,
+           KeyMap.render(buffer.current, as: .english).lowercased() == "autolang" {
+            DebugLog.shared.log(">>>>>>>>>>>>>>> ANCHOR: 'autolang' — annoyance just above ^^^ <<<<<<<<<<<<<<<")
+        }
         return Unmanaged.passUnretained(event)
     }
 }
