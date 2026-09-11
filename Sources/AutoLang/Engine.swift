@@ -96,7 +96,7 @@ final class Engine {
 
     // MARK: - Word boundary
 
-    func processWord(_ keystrokes: [Keystroke], boundary: Int64) -> Bool {
+    func processWord(_ keystrokes: [Keystroke], boundary: Int64, editingExisting: Bool) -> Bool {
         guard !Settings.shared.paused else { return false }
         if boundary != Self.spaceKeycode { pending.removeAll(); return false }
         guard keystrokes.count >= 2 else { pending.removeAll(); return false }
@@ -108,6 +108,14 @@ final class Engine {
         let other = KeyMap.render(keystrokes, as: to)
         guard !asTyped.isEmpty, !other.isEmpty else { pending.removeAll(); return false }
 
+        // Editing existing text: this "word" is only the FRAGMENT we retyped, not
+        // the whole on-screen word — converting it corrupts the word. Leave it.
+        if editingExisting {
+            pending.removeAll()
+            DebugLog.shared.log("WORD \"\(asTyped)\" → SKIP (editing existing text)")
+            return false
+        }
+
         // Personal dictionary: never touch a word you've protected.
         if dictionary.isProtected(asTyped) {
             pending.removeAll(); momentum = from
@@ -118,11 +126,19 @@ final class Engine {
         let validSelf = spell.isValid(asTyped, from)
         let validOther = spell.isValid(other, to)
         DebugLog.shared.log("WORD \"\(asTyped)\" from=\(L(from)) other=\"\(other)\""
-            + " selfValid=\(validSelf) otherValid=\(validOther)"
+            + " len=\(keystrokes.count) selfValid=\(validSelf) otherValid=\(validOther)"
             + " momentum=\(momentum.map(L) ?? "-") auto=\(Settings.shared.autoConvert)")
 
         if Settings.shared.autoConvert {
             if !validSelf, validOther {
+                // Short words (<4 letters) are unreliable on their own — a Hebrew
+                // abjad makes almost any short consonant cluster a "valid" word.
+                // Defer them; they convert only if a later word confirms the run.
+                if keystrokes.count < 4 {
+                    defer_(keystrokes, asTyped, from)
+                    DebugLog.shared.log("  → DEFER (short <4, need a 2nd word) pending=\(pending.count)")
+                    return false
+                }
                 return convertRun(asTyped: asTyped, other: other, from: from, to: to)
             } else if validSelf, validOther {
                 if momentum == to {

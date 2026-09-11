@@ -19,9 +19,15 @@ final class EventTapController {
     /// keystrokes of the current word so the engine can re-render + switch.
     var onManualConvert: (([Keystroke]) -> Void)?
 
-    /// Called on every committed word boundary: (word keystrokes, boundary keycode).
-    /// The engine decides whether to auto-convert.
-    var onWordBoundary: (([Keystroke], Int64) -> Void)?
+    /// Called on every committed word boundary: (word keystrokes, boundary keycode,
+    /// editingExisting). `editingExisting` is true when the typing that produced
+    /// this word began by editing into pre-existing text (backspaced past our
+    /// buffer, or moved the caret) — so the word is a FRAGMENT, not a whole word,
+    /// and must not be converted.
+    var onWordBoundary: (([Keystroke], Int64, Bool) -> Void)?
+
+    /// True while the current typing run is editing pre-existing on-screen text.
+    private var editingExisting = false
 
     /// Called when the user presses backspace immediately after an auto-convert:
     /// the engine reverts it. Carries whatever the engine armed via `armUndo`.
@@ -109,6 +115,7 @@ final class EventTapController {
         // language-matched to the word clicked into, and drop the retro run.
         if type == .leftMouseDown {
             caretMoved = true
+            editingExisting = true // clicked into text — subsequent typing edits it
             DebugLog.shared.log("CLICK (caret moved)")
             DispatchQueue.main.async { [weak self] in self?.onContextReset?() }
             return Unmanaged.passUnretained(event)
@@ -164,6 +171,7 @@ final class EventTapController {
         // gets language-matched). Fall through so the retro run resets & buffer flushes.
         if Self.navKeycodes.contains(keycode) {
             caretMoved = true
+            editingExisting = true // moved the caret — subsequent typing edits text
             DebugLog.shared.log("  → NAV (caret moved)")
         } else if caretMoved {
             // First key after moving the caret: match the input language to the
@@ -187,7 +195,10 @@ final class EventTapController {
         }
 
         // Backspace: mirror it in our buffer and invalidate any retro lookback.
+        // Backspacing when our buffer is already empty means we're deleting into
+        // pre-existing text — so what we type next edits an existing word.
         if keycode == 0x33 {
+            if buffer.isEmpty { editingExisting = true }
             buffer.deleteLast()
             DispatchQueue.main.async { [weak self] in self?.onContextReset?() }
             return Unmanaged.passUnretained(event)
@@ -197,10 +208,12 @@ final class EventTapController {
         // (double space, etc.) breaks contiguity, so reset the retro run.
         if KeyMap.wordBoundaryKeycodes.contains(keycode) {
             let finished = buffer.current
+            let wasEditing = editingExisting
             buffer.flush()
+            editingExisting = false // a boundary starts a fresh, clean word
             DispatchQueue.main.async { [weak self] in
                 if finished.isEmpty { self?.onContextReset?() }
-                else { self?.onWordBoundary?(finished, keycode) }
+                else { self?.onWordBoundary?(finished, keycode, wasEditing) }
             }
             return Unmanaged.passUnretained(event)
         }

@@ -100,9 +100,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.refreshBadge()
             self?.flash()
         }
-        tapController.onWordBoundary = { [weak self] word, boundary in
+        tapController.onWordBoundary = { [weak self] word, boundary, editing in
             guard let self else { return }
-            if self.engine.processWord(word, boundary: boundary) {
+            if self.engine.processWord(word, boundary: boundary, editingExisting: editing) {
                 self.tapController.armUndo()   // next backspace undoes it
                 self.refreshBadge()            // language may have flipped
                 self.flash()
