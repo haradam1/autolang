@@ -230,7 +230,7 @@ final class EventTapController {
         // we can find the moment right before it (works in either layout, no space needed).
         if DebugLog.shared.enabled,
            KeyMap.render(buffer.current, as: .english).lowercased() == "autolang" {
-            DebugLog.shared.log(">>>>>>>>>>>>>>> ANCHOR: 'autolang' — annoyance just above ^^^ <<<<<<<<<<<<<<<")
+            DebugLog.shared.event(">>>>>>>>>>>>>>> ANCHOR: 'autolang' — annoyance just above ^^^ <<<<<<<<<<<<<<<")
         }
         return Unmanaged.passUnretained(event)
     }

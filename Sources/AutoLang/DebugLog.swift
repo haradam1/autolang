@@ -1,12 +1,13 @@
 import Foundation
 
-/// Opt-in diagnostic log for tuning behavior. When enabled it records every
-/// keystroke, deletion, word decision, and language change (ours and the
-/// system's) to a local file so we can analyze what actually happened.
+/// Opt-in diagnostic log, privacy-minded: routine keystrokes are kept only in a
+/// small in-memory ring buffer and never touch disk. Only "interesting" moments
+/// — the `autolang` anchor, a language change, a conversion/undo, or a typo fix —
+/// flush a window to disk: the recent context *before*, the event, and a short
+/// tail *after*. So the file contains focused examples of behavior, not a full
+/// transcript of everything you type.
 ///
-/// PRIVACY: this deliberately records the text you type. It's off by default,
-/// writes only to a local file (~/Library/Logs/AutoLang/debug.log), and never
-/// leaves your Mac. Turn it off and clear the log when you're done debugging.
+/// Off by default; local only (~/Library/Logs/AutoLang/debug.log).
 final class DebugLog {
     static let shared = DebugLog()
 
@@ -14,10 +15,14 @@ final class DebugLog {
     private let queue = DispatchQueue(label: "com.autolang.debuglog")
     private var handle: FileHandle?
 
+    // Windowing state (touched only on `queue`).
+    private var ring: [String] = []          // recent routine lines, not yet written
+    private var writeAfter = 0               // routine lines still to write post-event
+    private let ringCap = 40                 // how much "before" context to keep
+    private let afterCount = 15              // how much "after" context to write
+
     private static let fmt: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm:ss.SSS"
-        return f
+        let f = DateFormatter(); f.dateFormat = "HH:mm:ss.SSS"; return f
     }()
 
     private init() {
@@ -29,32 +34,59 @@ final class DebugLog {
 
     var enabled: Bool { Settings.shared.debugLogging }
 
-    /// Append a line (message built lazily, so logging is free when disabled).
+    /// Routine event: kept in memory; written only if we're inside an open window.
     func log(_ message: @autoclosure () -> String) {
         guard enabled else { return }
         let line = "\(Self.fmt.string(from: Date()))  \(message())\n"
-        queue.async { self.append(line) }
+        queue.async { self.record(line) }
     }
 
-    /// Marker written when logging is turned on, so sessions are separable.
+    /// Interesting event: flushes the preceding context and opens/extends a window.
+    func event(_ message: @autoclosure () -> String) {
+        guard enabled else { return }
+        let line = "\(Self.fmt.string(from: Date()))  \(message())\n"
+        queue.async { self.mark(line) }
+    }
+
     func begin(_ note: String) {
         guard enabled else { return }
         let line = "\n===== \(Self.fmt.string(from: Date()))  \(note) =====\n"
-        queue.async { self.append(line) }
+        queue.async { self.ring.removeAll(); self.writeAfter = 0; self.write(line) }
     }
 
     func clear() {
         queue.async {
-            self.handle?.closeFile()
-            self.handle = nil
+            self.handle?.closeFile(); self.handle = nil
+            self.ring.removeAll(); self.writeAfter = 0
             try? Data().write(to: self.fileURL)
         }
     }
 
-    private func append(_ line: String) {
-        // If the file was removed/rotated out from under us, drop the stale
-        // handle so we recreate it — otherwise a days-long session could stop
-        // writing silently.
+    // MARK: - Windowing (on `queue`)
+
+    private func record(_ line: String) {
+        if writeAfter > 0 {
+            write(line)
+            writeAfter -= 1
+            if writeAfter == 0 { write("---- (end) ----\n") }
+        } else {
+            ring.append(line)
+            if ring.count > ringCap { ring.removeFirst(ring.count - ringCap) }
+        }
+    }
+
+    private func mark(_ line: String) {
+        if writeAfter == 0 {
+            write("\n---- window ----\n")
+            for l in ring { write(l) }   // the "before" context
+            ring.removeAll()
+        }
+        write(line)                       // the event itself
+        writeAfter = afterCount           // keep the next few routine lines ("after")
+    }
+
+    private func write(_ line: String) {
+        // Recreate if the file was removed/rotated so we never silently stop.
         if handle != nil, !FileManager.default.fileExists(atPath: fileURL.path) {
             handle?.closeFile(); handle = nil
         }

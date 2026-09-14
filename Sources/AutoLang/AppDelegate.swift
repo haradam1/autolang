@@ -117,7 +117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         tapController.onClipboardConvert = { [weak self] in
             let changed = ClipboardConverter.convertPasteboard()
-            DebugLog.shared.log("CLIPBOARD convert changed=\(changed)")
+            DebugLog.shared.event("CLIPBOARD convert changed=\(changed)")
             if changed { self?.flash() }
         }
         tapController.firstEditKeystroke = { [weak self] keycode, shifted in
@@ -150,7 +150,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func inputSourceChanged() {
-        DebugLog.shared.log("ACTIVE=\(inputSources.currentLanguage() == .hebrew ? "HE" : "EN") (observed)")
+        DebugLog.shared.event("ACTIVE=\(inputSources.currentLanguage() == .hebrew ? "HE" : "EN") (observed)")
         refreshBadge()
     }
 

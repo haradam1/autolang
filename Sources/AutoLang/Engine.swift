@@ -54,7 +54,7 @@ final class Engine {
         pending.removeAll()
         lastEdit = nil
         Stats.shared.recordConversion(words: [corrected], to: to, manual: true)
-        DebugLog.shared.log("MANUAL convert \(L(from))→\(L(to)) \"\(corrected)\"")
+        DebugLog.shared.event("MANUAL convert \(L(from))→\(L(to)) \"\(corrected)\"")
     }
 
     /// Backspace / cursor move: drop the retroactive run so we never rewrite the
@@ -90,7 +90,7 @@ final class Engine {
         inputSources.select(wordLang)
         pending.removeAll()
         momentum = wordLang
-        DebugLog.shared.log("FIRST-EDIT caretWord=\(L(wordLang)) current=\(L(current)) → SWITCH+inject \"\(corrected)\"")
+        DebugLog.shared.event("FIRST-EDIT caretWord=\(L(wordLang)) current=\(L(current)) → SWITCH+inject \"\(corrected)\"")
         return true
     }
 
@@ -165,7 +165,7 @@ final class Engine {
         // Typo correction on the committed current word (if enabled & not protected).
         if typoEnabled(from), let fixed = correction(for: asTyped, lang: from), fixed != asTyped {
             Stats.shared.recordTypo(word: fixed)
-            DebugLog.shared.log("  → TYPO \"\(asTyped)\"→\"\(fixed)\"")
+            DebugLog.shared.event("  → TYPO \"\(asTyped)\"→\"\(fixed)\"")
             return applyEdit(asTyped: [asTyped], corrected: [fixed], newLang: from, restore: from)
         }
         return false
@@ -184,7 +184,7 @@ final class Engine {
         pending.removeAll()
         for w in e.sourceWords { dictionary.protect(w) }
         Stats.shared.recordUndo()
-        DebugLog.shared.log("UNDO → restore \"\(e.originalText.trimmingCharacters(in: .whitespaces))\""
+        DebugLog.shared.event("UNDO → restore \"\(e.originalText.trimmingCharacters(in: .whitespaces))\""
             + " lang=\(L(e.restoreLang)); learned \(e.sourceWords)")
     }
 
@@ -207,7 +207,7 @@ final class Engine {
         momentum = to
         let correctedWords = foldCorrected + [other]
         Stats.shared.recordConversion(words: correctedWords, to: to)
-        DebugLog.shared.log("  → CONVERT \(L(from))→\(L(to)) fold=\(foldAsTyped.count)"
+        DebugLog.shared.event("  → CONVERT \(L(from))→\(L(to)) fold=\(foldAsTyped.count)"
             + " result=\"\(correctedWords.joined(separator: " "))\"")
         return applyEdit(asTyped: foldAsTyped + [asTyped],
                          corrected: correctedWords,
