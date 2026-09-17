@@ -131,24 +131,44 @@ final class Engine {
 
         if Settings.shared.autoConvert {
             if !validSelf, validOther {
-                // Short words (<4 letters) are unreliable on their own — a Hebrew
-                // abjad makes almost any short consonant cluster a "valid" word.
-                // Defer them; they convert only if a later word confirms the run.
+                // A word one safe edit from a real word in the CURRENT language is
+                // a typo, not an intended other-language word — fix it, don't flip.
+                if let fix = correction(for: asTyped, lang: from) {
+                    if typoEnabled(from), fix != asTyped {
+                        Stats.shared.recordTypo(word: fix)
+                        DebugLog.shared.event("  → TYPO \"\(asTyped)\"→\"\(fix)\" (over convert)")
+                        return applyEdit(asTyped: [asTyped], corrected: [fix], newLang: from, restore: from)
+                    }
+                    pending.removeAll()
+                    DebugLog.shared.log("  → KEEP (likely \(L(from)) typo, not a conversion)")
+                    return false
+                }
+                // Short words are unreliable alone (Hebrew abjad); wait for a 2nd word.
                 if keystrokes.count < 4 {
                     defer_(keystrokes, asTyped, from)
-                    DebugLog.shared.log("  → DEFER (short <4, need a 2nd word) pending=\(pending.count)")
+                    DebugLog.shared.log("  → DEFER (short <4) pending=\(pending.count)")
+                    return false
+                }
+                // EN→HE (target Hebrew) is unreliable — almost any consonant cluster
+                // is "valid" Hebrew. Convert a lone word only if the run is already
+                // Hebrew; otherwise defer for a 2nd-word confirmation. HE→EN (target
+                // English, reliable) converts as usual.
+                if to == .hebrew, momentum != to {
+                    defer_(keystrokes, asTyped, from)
+                    DebugLog.shared.log("  → DEFER (EN→HE needs Hebrew run or 2nd word) pending=\(pending.count)")
                     return false
                 }
                 return convertRun(asTyped: asTyped, other: other, from: from, to: to)
             } else if validSelf, validOther {
-                if momentum == to {
-                    return convertRun(asTyped: asTyped, other: other, from: from, to: to)
-                } else if momentum == from {
-                    pending.removeAll()            // consistent with the run — keep
+                // Valid in BOTH — never destroy a real word by flipping it alone.
+                // Keep it in the current run; only a later conversion can fold it in
+                // (a genuine multi-word wrong-layout phrase).
+                if momentum == from {
+                    pending.removeAll()
                     DebugLog.shared.log("  → KEEP (ambiguous, momentum=\(L(from)))")
                 } else {
-                    defer_(keystrokes, asTyped, from) // ambiguous, no run yet — hold
-                    DebugLog.shared.log("  → DEFER (ambiguous, no momentum) pending=\(pending.count)")
+                    defer_(keystrokes, asTyped, from)
+                    DebugLog.shared.log("  → DEFER (ambiguous) pending=\(pending.count)")
                     return false
                 }
             } else if validSelf, !validOther {
@@ -162,7 +182,7 @@ final class Engine {
             pending.removeAll()
         }
 
-        // Typo correction on the committed current word (if enabled & not protected).
+        // Typo correction on a kept word (the validSelf / unknown-both cases).
         if typoEnabled(from), let fixed = correction(for: asTyped, lang: from), fixed != asTyped {
             Stats.shared.recordTypo(word: fixed)
             DebugLog.shared.event("  → TYPO \"\(asTyped)\"→\"\(fixed)\"")

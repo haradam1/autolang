@@ -34,7 +34,7 @@ final class SpellChecker {
     ]
     // Words above whose bare form is ALSO a common word — for these we must NOT
     // auto-insert an apostrophe (too risky), only accept them as valid.
-    private static let ambiguousBare: Set<String> = ["its", "were", "well", "id", "wed", "hell", "shell", "cant", "wont", "lets"]
+    private static let ambiguousBare: Set<String> = ["its", "were", "well", "id", "wed", "hell", "shell", "cant", "wont", "lets", "ill"]
 
     init() {
         let avail = NSSpellChecker.shared.availableLanguages
